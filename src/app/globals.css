@@ -1,26 +1,90 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #fff7ed;
+  --foreground: #1e1b4b;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-ink: #1e1b4b;
+  --font-sans: var(--font-cairo), "Segoe UI", Tahoma, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: light;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+}
+
+.play-bg {
+  background-color: #fff7ed;
+  background-image:
+    radial-gradient(ellipse 42% 32% at 8% 10%, rgba(251, 191, 36, 0.55), transparent),
+    radial-gradient(ellipse 38% 30% at 94% 6%, rgba(56, 189, 248, 0.5), transparent),
+    radial-gradient(ellipse 36% 32% at 90% 92%, rgba(244, 114, 182, 0.42), transparent),
+    radial-gradient(ellipse 34% 28% at 6% 92%, rgba(52, 211, 153, 0.42), transparent);
+}
+
+.bubble {
+  background: var(--bubble);
+  color: var(--bubble-ink);
+  box-shadow: 0 7px 0 0 var(--edge);
+  touch-action: manipulation;
+}
+
+.bubble:focus-visible {
+  outline: 3px solid #1e1b4b;
+  outline-offset: 3px;
+}
+
+.bubble:active:not(:disabled) {
+  box-shadow: 0 3px 0 0 var(--edge);
+}
+
+.bubble:disabled {
+  cursor: default;
+}
+
+.edge-sky { --edge: #0369a1; }
+.edge-amber { --edge: #d97706; }
+.edge-emerald { --edge: #047857; }
+.edge-violet { --edge: #5b21b6; }
+.edge-rose { --edge: #be123c; }
+.edge-soft { --edge: #c4b5fd; }
+
+.pressable {
+  box-shadow: 0 7px 0 0 var(--edge);
+  touch-action: manipulation;
+}
+
+.pressable:focus-visible {
+  outline: 3px solid #1e1b4b;
+  outline-offset: 3px;
+}
+
+.pressable:active:not(:disabled) {
+  transform: translateY(4px);
+  box-shadow: 0 3px 0 0 var(--edge);
+}
+
+.letter-slots {
+  direction: ltr;
+  display: flex;
+  flex-flow: row-reverse nowrap;
+  align-items: center;
+  justify-content: center;
+  overflow-x: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bubble:active:not(:disabled),
+  .pressable:active:not(:disabled) {
+    transform: none;
+  }
 }

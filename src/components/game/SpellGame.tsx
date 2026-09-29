@@ -1,0 +1,297 @@
+"use client";
+
+import { motion, useAnimationControls } from "framer-motion";
+import { Lightbulb, Undo2, Volume2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Celebration } from "@/components/game/Celebration";
+import { ConfettiBurst } from "@/components/game/ConfettiBurst";
+import { FeedbackBanner } from "@/components/game/FeedbackBanner";
+import { GameHeader } from "@/components/game/GameHeader";
+import { LetterBubble } from "@/components/game/LetterBubble";
+import { BubblyButton } from "@/components/ui/BubblyButton";
+import { playCorrect, playLetterCue, playPop, playWrong, safePlay, speakArabic } from "@/lib/audio";
+import { copy } from "@/lib/copy";
+import { shuffle } from "@/lib/random";
+import { bubbleForToken, createLetterBank, type BankItem } from "@/lib/rounds";
+import { useLessons } from "@/components/game/useLessons";
+import { readSpellWord } from "@/lib/session";
+import { addLesson, addStars } from "@/lib/profiles";
+import type { LetterDoc, WordDoc } from "@/lib/data/lessonsData";
+
+type PlacedLetter = {
+  id: string;
+  token: string;
+};
+
+function pointInElement(element: HTMLElement | null, point: { x: number; y: number }) {
+  if (!element) return false;
+  const rect = element.getBoundingClientRect();
+  return point.x >= rect.left && point.x <= rect.right && point.y >= rect.top && point.y <= rect.bottom;
+}
+
+function freshBank(nextWords: WordDoc[], index: number, alphabet: LetterDoc[]) {
+  const nextWord = nextWords[index];
+  return nextWord ? createLetterBank(nextWord, alphabet) : [];
+}
+
+export function SpellGame() {
+  const lessons = useLessons();
+  const { letters, words } = lessons;
+  const [queue, setQueue] = useState<WordDoc[]>([]);
+  const [wordIndex, setWordIndex] = useState(0);
+  const [bank, setBank] = useState<BankItem[]>([]);
+  const [placed, setPlaced] = useState<PlacedLetter[]>([]);
+  const [phase, setPhase] = useState<"build" | "success" | "done">("build");
+  const [shake, setShake] = useState<{ id: string; tick: number } | null>(null);
+  const [hintId, setHintId] = useState<string | null>(null);
+  const [burstId, setBurstId] = useState(0);
+  const [started, setStarted] = useState(false);
+  const slotsRef = useRef<HTMLDivElement>(null);
+  const slotControls = useAnimationControls();
+  const lock = useRef(false);
+  const spoke = useRef(false);
+
+  const word = queue[wordIndex];
+  const usedIds = new Set(placed.map((entry) => entry.id));
+
+  if (lessons.ready && !started) {
+    setStarted(true);
+    if (words.length > 0) {
+      const storedId = readSpellWord();
+      const preferred = words.find((item) => item.id === storedId);
+      const rest = shuffle(words.filter((item) => item.id !== preferred?.id));
+      const nextQueue = preferred ? [preferred, ...rest] : shuffle(words);
+      setQueue(nextQueue);
+      setWordIndex(0);
+      setBank(freshBank(nextQueue, 0, letters));
+      setPlaced([]);
+      setHintId(null);
+      setShake(null);
+      setPhase("build");
+    }
+  }
+
+  useEffect(() => {
+    if (!started || spoke.current || queue.length === 0) return;
+    spoke.current = true;
+    const storedId = readSpellWord();
+    const first = queue[0];
+    if (storedId || !first) return;
+    speakArabic(first.word);
+    safePlay(() => playLetterCue(first.word.length * 17));
+  }, [started, queue]);
+
+  function shakeSlots() {
+    void slotControls.start({
+      x: [0, -10, 10, -6, 6, 0],
+      transition: { duration: 0.4 },
+    });
+  }
+
+  function attempt(item: BankItem) {
+    if (!word || lock.current || phase !== "build" || usedIds.has(item.id)) return;
+
+    const expected = word.letters[placed.length];
+    if (item.token !== expected) {
+      setShake((current) => ({ id: item.id, tick: (current?.tick ?? 0) + 1 }));
+      setHintId(null);
+      shakeSlots();
+      safePlay(playWrong);
+      return;
+    }
+
+    const nextPlaced = [...placed, item];
+    setPlaced(nextPlaced);
+    setHintId(null);
+
+    if (nextPlaced.length === word.letters.length) {
+      lock.current = true;
+      setPhase("success");
+      setBurstId((value) => value + 1);
+      addStars(1);
+      addLesson();
+      safePlay(playCorrect);
+      return;
+    }
+
+    safePlay(playPop);
+  }
+
+  function undo() {
+    if (phase !== "build" || placed.length === 0) return;
+    setPlaced((current) => current.slice(0, -1));
+    setHintId(null);
+  }
+
+  function showHint() {
+    if (!word || phase !== "build") return;
+    const expected = word.letters[placed.length];
+    const match = bank.find((item) => item.token === expected && !usedIds.has(item.id));
+    setHintId(match?.id ?? null);
+  }
+
+  function speakWord() {
+    if (!word) return;
+    safePlay(() => playLetterCue(word.word.length * 17));
+    speakArabic(word.word);
+  }
+
+  function beginWord(nextQueue: WordDoc[], index: number) {
+    setQueue(nextQueue);
+    setWordIndex(index);
+    setBank(freshBank(nextQueue, index, letters));
+    setPlaced([]);
+    setHintId(null);
+    setShake(null);
+    setPhase("build");
+    lock.current = false;
+  }
+
+  function nextWord() {
+    if (wordIndex + 1 >= queue.length) {
+      setPhase("done");
+      return;
+    }
+
+    beginWord(queue, wordIndex + 1);
+  }
+
+  function replay() {
+    if (words.length === 0) return;
+    setBurstId(0);
+    beginWord(shuffle(words), 0);
+  }
+
+  const feedback =
+    phase === "success"
+      ? { tone: "success" as const, message: copy.spelled }
+      : shake
+        ? { tone: "retry" as const, message: copy.spellWrong }
+        : { tone: null, message: null };
+
+  return (
+    <main dir="ltr" className="play-bg mx-auto flex min-h-dvh w-full max-w-3xl flex-col gap-4 px-4 py-4 sm:gap-5 sm:px-6 sm:py-6">
+      <ConfettiBurst burstId={burstId} />
+      <GameHeader
+        title={copy.spellTitle}
+        progress={phase === "done" || !word ? undefined : `${wordIndex + 1} / ${queue.length}`}
+      />
+
+      {!started ? (
+        <p dir="ltr" className="rounded-3xl bg-white/85 px-4 py-6 text-center text-xl font-black text-indigo-950">
+          Waa la diyaarinayaa...
+        </p>
+      ) : words.length === 0 ? (
+        <p dir="ltr" className="rounded-3xl bg-white/85 px-4 py-6 text-center text-xl font-black text-indigo-950">
+          {copy.noWords}
+        </p>
+      ) : phase === "done" || !word ? (
+        <Celebration title="Hambalyo!" body={copy.spellDone} onReplay={replay} />
+      ) : (
+        <>
+          <section className="rounded-3xl bg-white/85 px-4 py-5 text-center shadow-xl ring-1 ring-white">
+            <p dir="ltr" className="text-sm font-extrabold text-orange-700 sm:text-base">{copy.spellHint}</p>
+            <p className="mt-2 text-5xl" aria-hidden="true">
+              {word.image}
+            </p>
+            <p dir="ltr" className="text-2xl font-black text-indigo-950">{word.meaning}</p>
+            <p dir="ltr" className="text-sm font-extrabold text-orange-700">
+              {word.difficulty === "easy" ? copy.easy : copy.medium}
+            </p>
+            <motion.p
+              lang="ar"
+              dir="rtl"
+              animate={phase === "success" ? { scale: [1, 1.12, 1.05] } : { scale: 1 }}
+              className={`text-4xl font-black leading-tight sm:text-5xl ${
+                phase === "success"
+                  ? "text-amber-500 drop-shadow-[0_0_18px_rgba(251,191,36,0.95)]"
+                  : "text-indigo-700"
+              }`}
+            >
+              {word.word}
+            </motion.p>
+            <div className="mt-3 flex justify-center">
+              <BubblyButton tone="amber" onClick={speakWord} aria-label={`${copy.listen} ${word.meaning}`}>
+                <Volume2 className="size-6" aria-hidden="true" />
+                {copy.listen}
+              </BubblyButton>
+            </div>
+          </section>
+
+          <motion.div
+            ref={slotsRef}
+            animate={slotControls}
+            className={`letter-slots min-h-24 gap-2 rounded-3xl px-3 py-3 ${
+              phase === "success" ? "bg-amber-100 ring-4 ring-amber-300" : "bg-indigo-950/5"
+            }`}
+            aria-label={word.word}
+          >
+            {word.letters.map((_, index) => {
+              const filled = placed[index];
+              return (
+                <div
+                  key={`${word.id}-${index}`}
+                  className={`flex h-20 w-16 items-center justify-center rounded-3xl text-3xl font-black leading-none sm:h-24 sm:w-20 sm:text-4xl ${
+                    filled
+                      ? phase === "success"
+                        ? "bg-amber-300 text-indigo-950 shadow-[0_6px_0_0_#d97706]"
+                        : "bg-white text-indigo-950 shadow-[0_6px_0_0_#c4b5fd]"
+                      : "border-4 border-dashed border-indigo-300 bg-white/60"
+                  }`}
+                >
+                  {filled ? (
+                    <motion.span lang="ar" dir="rtl" initial={{ scale: 0.4, y: 10 }} animate={{ scale: 1, y: 0 }}>
+                      {filled.token}
+                    </motion.span>
+                  ) : (
+                    <span className="sr-only">Boos madhan {index + 1}</span>
+                  )}
+                </div>
+              );
+            })}
+          </motion.div>
+
+          <div className="flex flex-wrap justify-center gap-3">
+            {bank.map((item) => (
+              <LetterBubble
+                key={item.id}
+                label={item.token}
+                ariaLabel={item.token}
+                bubble={bubbleForToken(item.token, letters)}
+                disabled={phase !== "build" || usedIds.has(item.id)}
+                dimmed={usedIds.has(item.id)}
+                shaking={shake?.id === item.id}
+                shakeTick={shake?.id === item.id ? shake.tick : 0}
+                highlighted={hintId === item.id && !usedIds.has(item.id)}
+                enableDrag={phase === "build" && !usedIds.has(item.id)}
+                onPress={() => attempt(item)}
+                onDragRelease={(point) => {
+                  if (pointInElement(slotsRef.current, point)) attempt(item);
+                }}
+              />
+            ))}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <BubblyButton tone="rose" onClick={undo} disabled={phase !== "build" || placed.length === 0}>
+              <Undo2 className="size-5" aria-hidden="true" />
+              {copy.undo}
+            </BubblyButton>
+            <BubblyButton tone="amber" onClick={showHint} disabled={phase !== "build"}>
+              <Lightbulb className="size-5" aria-hidden="true" />
+              {copy.hint}
+            </BubblyButton>
+          </div>
+
+          <FeedbackBanner tone={feedback.tone} message={feedback.message} />
+
+          {phase === "success" ? (
+            <BubblyButton tone="emerald" onClick={nextWord} className="w-full">
+              {wordIndex + 1 >= queue.length ? copy.finish : copy.next}
+            </BubblyButton>
+          ) : null}
+        </>
+      )}
+    </main>
+  );
+}
