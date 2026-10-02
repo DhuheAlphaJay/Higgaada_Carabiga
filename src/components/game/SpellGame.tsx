@@ -9,7 +9,8 @@ import { FeedbackBanner } from "@/components/game/FeedbackBanner";
 import { GameHeader } from "@/components/game/GameHeader";
 import { LetterBubble } from "@/components/game/LetterBubble";
 import { BubblyButton } from "@/components/ui/BubblyButton";
-import { playCorrect, playLetterCue, playPop, playWrong, safePlay, speakArabic } from "@/lib/audio";
+import { playCorrect, playPop, playWrong, safePlay } from "@/lib/audio";
+import { arabicLetterSound, PRAISE, speakArabic, speakLetterSound, speakSequence } from "@/lib/arabicSpeech";
 import { copy } from "@/lib/copy";
 import { shuffle } from "@/lib/random";
 import { bubbleForToken, createLetterBank, type BankItem } from "@/lib/rounds";
@@ -78,7 +79,6 @@ export function SpellGame() {
     const first = queue[0];
     if (storedId || !first) return;
     speakArabic(first.word);
-    safePlay(() => playLetterCue(first.word.length * 17));
   }, [started, queue]);
 
   function shakeSlots() {
@@ -110,10 +110,12 @@ export function SpellGame() {
       setBurstId((value) => value + 1);
       addStars(1);
       addLesson();
+      speakSequence([arabicLetterSound(item.token), PRAISE]);
       safePlay(playCorrect);
       return;
     }
 
+    speakLetterSound(item.token);
     safePlay(playPop);
   }
 
@@ -132,7 +134,6 @@ export function SpellGame() {
 
   function speakWord() {
     if (!word) return;
-    safePlay(() => playLetterCue(word.word.length * 17));
     speakArabic(word.word);
   }
 
@@ -153,13 +154,17 @@ export function SpellGame() {
       return;
     }
 
+    const upcoming = queue[wordIndex + 1];
     beginWord(queue, wordIndex + 1);
+    if (upcoming) speakArabic(upcoming.word);
   }
 
   function replay() {
     if (words.length === 0) return;
     setBurstId(0);
-    beginWord(shuffle(words), 0);
+    const nextWords = shuffle(words);
+    beginWord(nextWords, 0);
+    if (nextWords[0]) speakArabic(nextWords[0].word);
   }
 
   const feedback =

@@ -8,7 +8,8 @@ import { ConfettiBurst } from "@/components/game/ConfettiBurst";
 import { FeedbackBanner } from "@/components/game/FeedbackBanner";
 import { GameHeader } from "@/components/game/GameHeader";
 import { LetterBubble } from "@/components/game/LetterBubble";
-import { playCorrect, playLetterCue, playWrong, safePlay, speakListenPrompt } from "@/lib/audio";
+import { playCorrect, playWrong, safePlay } from "@/lib/audio";
+import { speakLetterName, speakPraise, speakTryAgain } from "@/lib/arabicSpeech";
 import { copy } from "@/lib/copy";
 import { LISTEN_ROUNDS, bubbleForLetter, createListenRound, createListenRoundForTarget, type ListenRound } from "@/lib/rounds";
 import { useLessons } from "@/components/game/useLessons";
@@ -43,16 +44,12 @@ export function ListenPickGame() {
     const next = stored ? createListenRoundForTarget(letters, stored) : createListenRound(letters);
     setRound(next);
 
-    if (!storedId) {
-      speakListenPrompt(next.target.name);
-      safePlay(() => playLetterCue(next.target.letter.charCodeAt(0)));
-    }
+    if (!storedId) speakLetterName(next.target.letter);
   }, [lessonsReady, letters]);
 
   function playPrompt() {
     if (!round) return;
-    speakListenPrompt(round.target.name);
-    safePlay(() => playLetterCue(round.target.letter.charCodeAt(0)));
+    speakLetterName(round.target.letter);
   }
 
   function handlePick(letter: LetterDoc) {
@@ -67,7 +64,14 @@ export function ListenPickGame() {
       if (isLast) addLesson();
       safePlay(playCorrect);
 
-      advanceTimer.current = window.setTimeout(() => {
+      let moved = false;
+      const goNext = () => {
+        if (moved) return;
+        moved = true;
+        if (advanceTimer.current !== null) {
+          window.clearTimeout(advanceTimer.current);
+          advanceTimer.current = null;
+        }
         if (isLast) {
           setPhase("done");
           return;
@@ -80,14 +84,17 @@ export function ListenPickGame() {
         setTried([]);
         setShake(null);
         lock.current = false;
-        speakListenPrompt(next.target.name);
-        safePlay(() => playLetterCue(next.target.letter.charCodeAt(0)));
-      }, 1400);
+        speakLetterName(next.target.letter);
+      };
+
+      advanceTimer.current = window.setTimeout(goNext, 3200);
+      speakPraise(goNext);
       return;
     }
 
     setTried((current) => [...current, letter.id]);
     setShake((current) => ({ id: letter.id, tick: (current?.tick ?? 0) + 1 }));
+    speakTryAgain();
     safePlay(playWrong);
   }
 
@@ -101,8 +108,7 @@ export function ListenPickGame() {
     setShake(null);
     setBurstId(0);
     lock.current = false;
-    speakListenPrompt(next.target.name);
-    safePlay(() => playLetterCue(next.target.letter.charCodeAt(0)));
+    speakLetterName(next.target.letter);
   }
 
   const feedback =

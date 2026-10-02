@@ -9,7 +9,7 @@ import { ParentGate } from "@/components/admin/ParentGate";
 import { useActiveChild, useStars } from "@/components/game/useStars";
 import { ChildrenModal } from "@/components/profiles/ChildrenModal";
 import { readLessons } from "@/lib/data/lessonStore";
-import { playLetterCue, safePlay, speakArabic, speakListenPrompt } from "@/lib/audio";
+import { speakArabic, speakLetterName } from "@/lib/arabicSpeech";
 import { copy } from "@/lib/copy";
 import { sampleOne } from "@/lib/random";
 import { createListenRound } from "@/lib/rounds";
@@ -140,8 +140,7 @@ function startListen() {
   if (letters.length === 0) return;
   const round = createListenRound(letters);
   rememberListenTarget(round.target.id);
-  speakListenPrompt(round.target.name);
-  safePlay(() => playLetterCue(round.target.letter.charCodeAt(0)));
+  speakLetterName(round.target.letter);
 }
 
 function startSpell() {
@@ -150,7 +149,6 @@ function startSpell() {
   const word = sampleOne(words);
   rememberSpellWord(word.id);
   speakArabic(word.word);
-  safePlay(() => playLetterCue(word.word.length * 17));
 }
 
 function ModeCard({
