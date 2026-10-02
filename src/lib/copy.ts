@@ -74,4 +74,6 @@ export const copy = {
   noChildrenAdmin: "Weli ma jiraan carruur diiwaangashan.",
   totalStars: "Wadarta xiddigaha",
   lessonsDone: "Casharrada dhammaaday",
+  installApp: "📲 Ku shubo Taleefankaaga / Install App",
+  installIos: "Safari: Share, kadibna Ku dar shaashadda hore.",
 } as const;

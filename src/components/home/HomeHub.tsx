@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { ParentGate } from "@/components/admin/ParentGate";
+import { InstallAppButton } from "@/components/pwa/InstallAppButton";
 import { useActiveChild, useStars } from "@/components/game/useStars";
 import { ChildrenModal } from "@/components/profiles/ChildrenModal";
 import { readLessons } from "@/lib/data/lessonStore";
@@ -87,6 +88,8 @@ export function HomeHub() {
           <span>{stars}</span>
         </div>
       </header>
+
+      <InstallAppButton />
 
       <section className="relative mt-8 text-center sm:mt-14" dir="ltr">
         <p className="text-sm font-extrabold tracking-wide text-violet-700 sm:text-base">{copy.brand}</p>
