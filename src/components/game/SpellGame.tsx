@@ -8,6 +8,7 @@ import { ConfettiBurst } from "@/components/game/ConfettiBurst";
 import { FeedbackBanner } from "@/components/game/FeedbackBanner";
 import { GameHeader } from "@/components/game/GameHeader";
 import { LetterBubble } from "@/components/game/LetterBubble";
+import { TashkeelWord } from "@/components/game/TashkeelWord";
 import { BubblyButton } from "@/components/ui/BubblyButton";
 import { playCorrect, playPop, playWrong, safePlay } from "@/lib/audio";
 import { arabicLetterSound, PRAISE, speakSequence, TRY_AGAIN, speakVocalized } from "@/lib/arabicSpeech";
@@ -15,7 +16,6 @@ import { copy } from "@/lib/copy";
 import { shuffle } from "@/lib/random";
 import { bubbleForToken, createLetterBank, type BankItem } from "@/lib/rounds";
 import { useLessons } from "@/components/game/useLessons";
-import { tileFace } from "@/lib/data/curriculum";
 import { readLessonLevel, readSpellWord } from "@/lib/session";
 import { addLesson, addStars } from "@/lib/profiles";
 import type { LetterDoc, WordDoc } from "@/lib/data/lessonsData";
@@ -209,25 +209,16 @@ export function SpellGame() {
             <p dir="ltr" className="text-sm font-extrabold text-orange-700">
               {word.difficulty === "easy" ? copy.easy : copy.medium}
             </p>
-            <div className="letter-slots mt-3 gap-2">
-              {word.letters.map((token, index) => {
-                const focused = word.focus.includes(index);
-                return (
-                  <button
-                    key={`${word.id}-piece-${index}`}
-                    type="button"
-                    onClick={() => speakSequence([arabicLetterSound(token)])}
-                    className={`pressable flex h-16 min-w-14 items-center justify-center rounded-2xl px-2 text-3xl font-black sm:h-20 sm:min-w-16 sm:text-4xl ${
-                      focused ? "bg-white text-red-600 ring-4 ring-red-300" : "bg-indigo-50 text-indigo-950"
-                    }`}
-                  >
-                    <span lang="ar" dir="rtl">
-                      {tileFace(token, index, word.letters)}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            <motion.div
+              animate={phase === "success" ? { scale: [1, 1.05, 1.02] } : { scale: 1 }}
+              className="mx-auto mt-4 w-full max-w-lg rounded-[2rem] bg-white px-5 py-6 shadow-[0_10px_0_0_#ddd6fe] ring-4 ring-violet-200"
+            >
+              <TashkeelWord
+                letters={word.letters}
+                focus={word.focus}
+                className="block text-center text-6xl font-black leading-relaxed text-indigo-950 sm:text-7xl"
+              />
+            </motion.div>
             <div className="mt-3 flex justify-center">
               <BubblyButton tone="amber" onClick={speakWord} aria-label={`${copy.listen} ${word.meaning}`}>
                 <Volume2 className="size-6" aria-hidden="true" />

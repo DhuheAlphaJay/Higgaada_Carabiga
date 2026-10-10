@@ -10,9 +10,9 @@ export function TashkeelWord({
   const marked = new Set(focus);
 
   return (
-    <span lang="ar" dir="rtl" className={className}>
+    <span lang="ar" dir="rtl" className={`arabic-run ${className}`}>
       {letters.map((token, index) => (
-        <span key={`${token}-${index}`} className={marked.has(index) ? "text-red-600" : undefined}>
+        <span key={`${index}-${token}`} className={marked.has(index) ? "arabic-focus" : undefined}>
           {token}
         </span>
       ))}

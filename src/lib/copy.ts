@@ -6,7 +6,7 @@ export const copy = {
   audience: "Carruurta",
   listenHint: "Dhageyso codka, kadibna dooro xarafka saxda ah.",
   spellTitle: "Isku Dubarid Xarfaha",
-  spellHint: "Eeg xarfaha kala furan, kadibna ka dhex dooro kuwa hoose.",
+  spellHint: "Eeg erayga, kadibna ka dhex dooro xarfaha hoose.",
   listenWordHint: "Dhageyso erayga, kadibna dooro kaadhka saxda ah.",
   buildWord: "Dhiso xaraf-xaraf",
   wrong: "Waad khaldatay, mar kale isku day!",

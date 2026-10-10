@@ -74,6 +74,25 @@ body {
   box-shadow: 0 3px 0 0 var(--edge);
 }
 
+/* One inline run so Cairo keeps Arabic cursive joins, including a red focus letter. */
+.arabic-run {
+  white-space: nowrap;
+  font-variant-ligatures: common-ligatures contextual;
+}
+
+.arabic-run > span {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  letter-spacing: 0;
+  word-spacing: 0;
+}
+
+.arabic-focus {
+  color: #dc2626;
+}
+
 .letter-slots {
   direction: ltr;
   display: flex;
