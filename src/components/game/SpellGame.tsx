@@ -8,14 +8,15 @@ import { ConfettiBurst } from "@/components/game/ConfettiBurst";
 import { FeedbackBanner } from "@/components/game/FeedbackBanner";
 import { GameHeader } from "@/components/game/GameHeader";
 import { LetterBubble } from "@/components/game/LetterBubble";
+import { TashkeelWord } from "@/components/game/TashkeelWord";
 import { BubblyButton } from "@/components/ui/BubblyButton";
 import { playCorrect, playPop, playWrong, safePlay } from "@/lib/audio";
-import { arabicLetterSound, PRAISE, speakArabic, speakLetterSound, speakSequence } from "@/lib/arabicSpeech";
+import { arabicLetterSound, PRAISE, speakArabic, speakSequence, speakVocalized } from "@/lib/arabicSpeech";
 import { copy } from "@/lib/copy";
 import { shuffle } from "@/lib/random";
 import { bubbleForToken, createLetterBank, type BankItem } from "@/lib/rounds";
 import { useLessons } from "@/components/game/useLessons";
-import { readSpellWord } from "@/lib/session";
+import { readLessonLevel, readSpellWord } from "@/lib/session";
 import { addLesson, addStars } from "@/lib/profiles";
 import type { LetterDoc, WordDoc } from "@/lib/data/lessonsData";
 
@@ -54,14 +55,16 @@ export function SpellGame() {
 
   const word = queue[wordIndex];
   const usedIds = new Set(placed.map((entry) => entry.id));
+  const level = lessons.ready ? readLessonLevel() : null;
+  const pool = level ? words.filter((item) => item.level === level) : words;
 
   if (lessons.ready && !started) {
     setStarted(true);
-    if (words.length > 0) {
+    if (pool.length > 0) {
       const storedId = readSpellWord();
-      const preferred = words.find((item) => item.id === storedId);
-      const rest = shuffle(words.filter((item) => item.id !== preferred?.id));
-      const nextQueue = preferred ? [preferred, ...rest] : shuffle(words);
+      const preferred = pool.find((item) => item.id === storedId);
+      const rest = shuffle(pool.filter((item) => item.id !== preferred?.id));
+      const nextQueue = preferred ? [preferred, ...rest] : shuffle(pool);
       setQueue(nextQueue);
       setWordIndex(0);
       setBank(freshBank(nextQueue, 0, letters));
@@ -78,7 +81,7 @@ export function SpellGame() {
     const storedId = readSpellWord();
     const first = queue[0];
     if (storedId || !first) return;
-    speakArabic(first.word);
+    speakVocalized(first.letters, first.word);
   }, [started, queue]);
 
   function shakeSlots() {
@@ -115,7 +118,7 @@ export function SpellGame() {
       return;
     }
 
-    speakLetterSound(item.token);
+    speakArabic(arabicLetterSound(item.token));
     safePlay(playPop);
   }
 
@@ -134,7 +137,7 @@ export function SpellGame() {
 
   function speakWord() {
     if (!word) return;
-    speakArabic(word.word);
+    speakVocalized(word.letters, word.word);
   }
 
   function beginWord(nextQueue: WordDoc[], index: number) {
@@ -156,15 +159,15 @@ export function SpellGame() {
 
     const upcoming = queue[wordIndex + 1];
     beginWord(queue, wordIndex + 1);
-    if (upcoming) speakArabic(upcoming.word);
+    if (upcoming) speakVocalized(upcoming.letters, upcoming.word);
   }
 
   function replay() {
-    if (words.length === 0) return;
+    if (pool.length === 0) return;
     setBurstId(0);
-    const nextWords = shuffle(words);
+    const nextWords = shuffle(pool);
     beginWord(nextWords, 0);
-    if (nextWords[0]) speakArabic(nextWords[0].word);
+    if (nextWords[0]) speakVocalized(nextWords[0].letters, nextWords[0].word);
   }
 
   const feedback =
@@ -186,7 +189,7 @@ export function SpellGame() {
         <p dir="ltr" className="rounded-3xl bg-white/85 px-4 py-6 text-center text-xl font-black text-indigo-950">
           Waa la diyaarinayaa...
         </p>
-      ) : words.length === 0 ? (
+      ) : queue.length === 0 ? (
         <p dir="ltr" className="rounded-3xl bg-white/85 px-4 py-6 text-center text-xl font-black text-indigo-950">
           {copy.noWords}
         </p>
@@ -204,16 +207,14 @@ export function SpellGame() {
               {word.difficulty === "easy" ? copy.easy : copy.medium}
             </p>
             <motion.p
-              lang="ar"
-              dir="rtl"
-              animate={phase === "success" ? { scale: [1, 1.12, 1.05] } : { scale: 1 }}
-              className={`text-4xl font-black leading-tight sm:text-5xl ${
-                phase === "success"
-                  ? "text-amber-500 drop-shadow-[0_0_18px_rgba(251,191,36,0.95)]"
-                  : "text-indigo-700"
-              }`}
+              animate={phase === "success" ? { scale: [1, 1.08, 1.03] } : { scale: 1 }}
+              className="text-4xl font-black leading-tight sm:text-5xl"
             >
-              {word.word}
+              <TashkeelWord
+                letters={word.letters}
+                focus={word.focus}
+                className={phase === "success" ? "text-amber-500 drop-shadow-[0_0_18px_rgba(251,191,36,0.95)]" : "text-indigo-700"}
+              />
             </motion.p>
             <div className="mt-3 flex justify-center">
               <BubblyButton tone="amber" onClick={speakWord} aria-label={`${copy.listen} ${word.meaning}`}>
@@ -233,15 +234,20 @@ export function SpellGame() {
           >
             {word.letters.map((_, index) => {
               const filled = placed[index];
+              const focused = word.focus.includes(index);
               return (
                 <div
                   key={`${word.id}-${index}`}
                   className={`flex h-20 w-16 items-center justify-center rounded-3xl text-3xl font-black leading-none sm:h-24 sm:w-20 sm:text-4xl ${
                     filled
-                      ? phase === "success"
-                        ? "bg-amber-300 text-indigo-950 shadow-[0_6px_0_0_#d97706]"
-                        : "bg-white text-indigo-950 shadow-[0_6px_0_0_#c4b5fd]"
-                      : "border-4 border-dashed border-indigo-300 bg-white/60"
+                      ? focused
+                        ? "bg-white text-red-600 shadow-[0_6px_0_0_#e11d48] ring-4 ring-red-300"
+                        : phase === "success"
+                          ? "bg-amber-300 text-indigo-950 shadow-[0_6px_0_0_#d97706]"
+                          : "bg-white text-indigo-950 shadow-[0_6px_0_0_#c4b5fd]"
+                      : focused
+                        ? "border-4 border-dashed border-red-400 bg-red-50"
+                        : "border-4 border-dashed border-indigo-300 bg-white/60"
                   }`}
                 >
                   {filled ? (

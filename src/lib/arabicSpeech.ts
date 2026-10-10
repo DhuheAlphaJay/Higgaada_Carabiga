@@ -1,4 +1,4 @@
-const MARKS = /[\u0640\u064B-\u0652\u0670]/g;
+import { pacedSpeech } from "@/lib/data/curriculum";
 
 /** Spoken Arabic names so each letter is clear for children. */
 const LETTER_NAMES: Record<string, string> = {
@@ -44,9 +44,11 @@ export const PRAISE = "أَحْسَنْت! مُمْتَاز!";
 type SpeakOptions = {
   queue?: boolean;
   onEnd?: () => void;
+  rate?: number;
 };
 
 const retainedUtterances: SpeechSynthesisUtterance[] = [];
+const MARKS = /[\u0640\u064B-\u0652\u0670]/g;
 
 function bareLetter(token: string) {
   return token.replace(MARKS, "");
@@ -68,24 +70,25 @@ export function arabicLetterSound(token: string) {
 function bestArabicVoice() {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
   const voices = window.speechSynthesis.getVoices();
-  const arabic = voices.filter((voice) => voice.lang.toLowerCase().startsWith("ar"));
-  return (
-    arabic.find((voice) => PREFERRED_VOICES.some((name) => voice.name.toLowerCase().includes(name))) ??
-    arabic.find((voice) => voice.lang.toLowerCase().startsWith("ar-sa")) ??
-    arabic[0] ??
-    null
-  );
+  const langOf = (voice: SpeechSynthesisVoice) => voice.lang.toLowerCase().replace(/_/g, "-");
+  const saudi = voices.filter((voice) => langOf(voice).startsWith("ar-sa"));
+  const namedSaudi = saudi.find((voice) => PREFERRED_VOICES.some((name) => voice.name.toLowerCase().includes(name)));
+  return namedSaudi ?? saudi[0] ?? null;
 }
 
-function configure(utterance: SpeechSynthesisUtterance) {
+function configure(utterance: SpeechSynthesisUtterance, rate = 0.85) {
   utterance.lang = "ar-SA";
-  utterance.rate = 0.85;
+  utterance.rate = rate;
   const voice = bestArabicVoice();
   if (voice) utterance.voice = voice;
 }
 
 export function speakArabic(text: string, options?: SpeakOptions) {
   speakSequence([text], options);
+}
+
+export function speakVocalized(letters: readonly string[], fallback: string) {
+  speakArabic(pacedSpeech(letters, fallback), { rate: 0.75 });
 }
 
 export function speakSequence(phrases: string[], options?: SpeakOptions) {
@@ -107,7 +110,7 @@ export function speakSequence(phrases: string[], options?: SpeakOptions) {
     const start = () => {
       lines.forEach((line, index) => {
         const utterance = new SpeechSynthesisUtterance(line);
-        configure(utterance);
+        configure(utterance, options?.rate);
         if (index === lines.length - 1) {
           utterance.onend = finish;
           utterance.onerror = (event) => {

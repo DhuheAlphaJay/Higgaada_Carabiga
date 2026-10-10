@@ -1,5 +1,7 @@
-import { getDb, isFirebaseConfigured } from "@/lib/firebase";
+import { focusForLevel, inferLessonLevel, isLessonLevel } from "@/lib/data/curriculum";
 import type { LetterDoc, WordDoc } from "@/lib/data/lessonsData";
+import { withCatalog } from "@/lib/data/lessonStore";
+import { getDb, isFirebaseConfigured } from "@/lib/firebase";
 import type { ChildProfile, ProfileState } from "@/lib/profiles";
 
 let started = false;
@@ -127,19 +129,30 @@ async function reconcileLessons(db: import("firebase/firestore").Firestore, fire
     const revision = lessonsRevision;
     const state = readLessons();
     await writeLessons(db, firestore, state.letters, state.words);
+    await firestore.setDoc(firestore.doc(db, "settings", "curriculum"), { version: 2 }, { merge: true });
     if (lessonsRevision === revision) lessonsAck = revision;
     else await pushLessons();
     return;
   }
 
-  const letters = letterSnap.docs.flatMap((item) => {
+  let letters = letterSnap.docs.flatMap((item) => {
     const letter = letterFromData(item.id, item.data());
     return letter ? [letter] : [];
   });
-  const words = wordSnap.docs.flatMap((item) => {
+  let words = wordSnap.docs.flatMap((item) => {
     const word = wordFromData(item.id, item.data());
     return word ? [word] : [];
   });
+  const curriculumSnap = await firestore.getDoc(firestore.doc(db, "settings", "curriculum"));
+  const curriculumVersion = curriculumSnap.exists() ? Number(curriculumSnap.data().version) : 0;
+  if (!Number.isFinite(curriculumVersion) || curriculumVersion < 2) {
+    const merged = withCatalog(letters, words);
+    letters = merged.letters;
+    words = merged.words;
+    await writeLessons(db, firestore, letters, words);
+    await firestore.setDoc(firestore.doc(db, "settings", "curriculum"), { version: 2 }, { merge: true });
+    lessonsAck = lessonsRevision;
+  }
   const { readLessons, replaceLessons } = await import("@/lib/data/lessonStore");
   const current = readLessons();
   if (sameLetters(current.letters, letters) && sameWords(current.words, words)) return;
@@ -251,6 +264,8 @@ async function writeLessons(
         letters: item.letters,
         image: item.image,
         difficulty: item.difficulty,
+        level: item.level,
+        focus: item.focus,
       },
     })),
   );
@@ -323,6 +338,10 @@ function wordFromData(id: string, data: Record<string, unknown>): WordDoc | null
   if (typeof data.word !== "string" || typeof data.meaning !== "string" || !Array.isArray(data.letters)) return null;
   const letters = data.letters.filter((item): item is string => typeof item === "string");
   if (letters.length === 0) return null;
+  const level = isLessonLevel(data.level) ? data.level : inferLessonLevel(letters);
+  const focus = Array.isArray(data.focus)
+    ? data.focus.filter((index): index is number => typeof index === "number" && index >= 0 && index < letters.length)
+    : [];
   return {
     id,
     word: data.word,
@@ -330,6 +349,8 @@ function wordFromData(id: string, data: Record<string, unknown>): WordDoc | null
     letters,
     image: typeof data.image === "string" && data.image.trim() ? data.image : "⭐",
     difficulty: data.difficulty === "medium" ? "medium" : "easy",
+    level,
+    focus: focus.length > 0 ? focus : focusForLevel(letters, level),
   };
 }
 

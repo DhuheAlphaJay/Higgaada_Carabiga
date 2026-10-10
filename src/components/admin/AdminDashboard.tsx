@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState, useSyncExternalStore, type FormEvent } from "react";
 import { useLessons } from "@/components/game/useLessons";
 import { useProfiles } from "@/components/game/useStars";
+import { TashkeelWord } from "@/components/game/TashkeelWord";
 import { BubblyButton } from "@/components/ui/BubblyButton";
 import { copy } from "@/lib/copy";
 import {
@@ -17,6 +18,7 @@ import {
   type LetterInput,
   type WordInput,
 } from "@/lib/data/lessonStore";
+import { chapters, type LessonLevel } from "@/lib/data/curriculum";
 import type { WordDifficulty } from "@/lib/data/lessonsData";
 import { readCloudLink, subscribeCloudLink } from "@/lib/sync/cloud";
 import { avatarEmoji, childLevel, deleteChild, resetChild } from "@/lib/profiles";
@@ -30,6 +32,7 @@ const emptyWord: WordInput = {
   meaning: "",
   image: "",
   difficulty: "easy",
+  level: "harakat",
 };
 
 const emptyLetter: LetterInput = {
@@ -218,6 +221,20 @@ function WordManager({ words }: { words: ReturnType<typeof useLessons>["words"] 
           {copy.somaliMeaning}
           <input value={form.meaning} onChange={(event) => setForm({ ...form, meaning: event.target.value })} className={fieldClass} />
         </label>
+        <label className="text-sm font-extrabold text-indigo-950">
+          {copy.chooseLevel}
+          <select
+            value={form.level}
+            onChange={(event) => setForm({ ...form, level: event.target.value as LessonLevel })}
+            className={fieldClass}
+          >
+            {chapters.map((chapter) => (
+              <option key={chapter.id} value={chapter.id}>
+                {copy.chapter} {chapter.order} · {chapter.arabic}
+              </option>
+            ))}
+          </select>
+        </label>
         <div className="grid grid-cols-2 gap-3">
           <label className="text-sm font-extrabold text-indigo-950">
             {copy.emoji}
@@ -263,11 +280,12 @@ function WordManager({ words }: { words: ReturnType<typeof useLessons>["words"] 
           {words.map((word) => (
             <li key={word.id} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-amber-50 px-3 py-3">
               <div>
-                <p lang="ar" dir="rtl" className="text-2xl font-black text-indigo-950">
-                  {word.image} {word.word}
+                <p className="flex items-center gap-2 text-2xl font-black text-indigo-950">
+                  <span aria-hidden="true">{word.image}</span>
+                  <TashkeelWord letters={word.letters} focus={word.focus} className="text-indigo-950" />
                 </p>
                 <p className="text-sm font-bold text-indigo-800">
-                  {word.meaning} · {word.letters.join(" ")}
+                  {word.meaning} · {chapters.find((chapter) => chapter.id === word.level)?.arabic}
                 </p>
               </div>
               {confirmId === word.id ? (
@@ -292,6 +310,7 @@ function WordManager({ words }: { words: ReturnType<typeof useLessons>["words"] 
                       meaning: word.meaning,
                       image: word.image,
                       difficulty: word.difficulty,
+                      level: word.level,
                     });
                     setError(false);
                   }}

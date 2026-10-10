@@ -1,3 +1,4 @@
+import { focusForLevel, inferLessonLevel, isLessonLevel, type LessonLevel } from "@/lib/data/curriculum";
 import { lettersCollection, wordsCollection, type LetterDoc, type WordDifficulty, type WordDoc } from "@/lib/data/lessonsData";
 
 export type LessonState = {
@@ -12,6 +13,7 @@ export type WordInput = {
   meaning: string;
   image: string;
   difficulty: WordDifficulty;
+  level: LessonLevel;
 };
 
 export type LetterInput = {
@@ -21,6 +23,8 @@ export type LetterInput = {
 };
 
 const STORAGE_KEY = "xuruuf-lessons";
+const VERSION_KEY = "xuruuf-curriculum-version";
+const CURRICULUM_VERSION = 2;
 const CHANGE_EVENT = "xuruuf-lessons-change";
 
 const serverSnapshot: LessonState = {
@@ -68,6 +72,10 @@ function parseWords(value: unknown): WordDoc[] | null {
     if (typeof word.id !== "string" || typeof word.word !== "string" || typeof word.meaning !== "string") return [];
     const letters = Array.isArray(word.letters) ? word.letters.filter((token): token is string => typeof token === "string") : [];
     if (letters.length === 0) return [];
+    const level = isLessonLevel(word.level) ? word.level : inferLessonLevel(letters);
+    const focus = Array.isArray(word.focus)
+      ? word.focus.filter((index): index is number => typeof index === "number" && index >= 0 && index < letters.length)
+      : [];
     return [
       {
         id: word.id,
@@ -76,6 +84,8 @@ function parseWords(value: unknown): WordDoc[] | null {
         letters,
         image: typeof word.image === "string" && word.image.trim() ? word.image : "⭐",
         difficulty: isDifficulty(word.difficulty) ? word.difficulty : "easy",
+        level,
+        focus: focus.length > 0 ? focus : focusForLevel(letters, level),
       },
     ];
   });
@@ -98,11 +108,48 @@ function loadFromStorage(): LessonState | null {
 function ensureLoaded() {
   if (loaded || typeof window === "undefined") return;
   loaded = true;
-  snapshot = loadFromStorage() ?? {
+  const stored = loadFromStorage();
+  if (stored && readCurriculumVersion() < CURRICULUM_VERSION) {
+    const next = withCatalog(stored.letters, stored.words);
+    snapshot = { ...next, ready: true };
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ letters: next.letters, words: next.words }));
+      window.localStorage.setItem(VERSION_KEY, String(CURRICULUM_VERSION));
+    } catch {
+      snapshot = { ...next, ready: true };
+    }
+    return;
+  }
+  if (readCurriculumVersion() < CURRICULUM_VERSION) {
+    try {
+      window.localStorage.setItem(VERSION_KEY, String(CURRICULUM_VERSION));
+    } catch {
+      /* The catalog still loads from memory when storage is blocked. */
+    }
+  }
+  snapshot = stored ?? {
     letters: lettersCollection,
     words: wordsCollection,
     ready: true,
   };
+}
+
+function readCurriculumVersion() {
+  const value = Number(window.localStorage.getItem(VERSION_KEY));
+  return Number.isFinite(value) ? value : 0;
+}
+
+export function withCatalog(letters: LetterDoc[], words: WordDoc[]) {
+  return {
+    letters: mergeById(letters, lettersCollection),
+    words: mergeById(words, wordsCollection),
+  };
+}
+
+function mergeById<T extends { id: string }>(current: T[], catalog: readonly T[]) {
+  const ids = new Set(current.map((item) => item.id));
+  const added = catalog.filter((item) => !ids.has(item.id));
+  return added.length > 0 ? [...current, ...added] : current;
 }
 
 function commit(next: LessonState, options?: { remote?: boolean }) {
@@ -193,6 +240,8 @@ export function addWord(input: WordInput) {
     letters,
     image: input.image.trim() || "⭐",
     difficulty: input.difficulty,
+    level: input.level,
+    focus: focusForLevel(letters, input.level),
   };
   commit({ ...state, words: [...state.words, doc] });
   return doc;
@@ -217,6 +266,8 @@ export function updateWord(id: string, input: WordInput) {
             letters,
             image: input.image.trim() || "⭐",
             difficulty: input.difficulty,
+            level: input.level,
+            focus: focusForLevel(letters, input.level),
           }
         : item,
     ),

@@ -1,5 +1,6 @@
 const LISTEN_TARGET_KEY = "xuruuf-listen-target";
 const SPELL_WORD_KEY = "xuruuf-spell-word";
+const LESSON_LEVEL_KEY = "xuruuf-lesson-level";
 
 let listenTargetCache: string | null | undefined;
 let spellWordCache: string | null | undefined;
@@ -40,4 +41,13 @@ export function readSpellWord() {
   return readOnce(SPELL_WORD_KEY, spellWordCache, (value) => {
     spellWordCache = value;
   });
+}
+
+export function rememberLessonLevel(level: string) {
+  window.sessionStorage.setItem(LESSON_LEVEL_KEY, level);
+}
+
+export function readLessonLevel() {
+  if (typeof window === "undefined") return null;
+  return window.sessionStorage.getItem(LESSON_LEVEL_KEY);
 }
