@@ -57,8 +57,16 @@ export const chapters: Chapter[] = [
 const SUKOON = "\u0652";
 const SHADDA = "\u0651";
 const TATWEEL = "\u0640";
+const FATHA = "\u064E";
+const DAMMA = "\u064F";
+const KASRA = "\u0650";
+const FATHATAN = "\u064B";
+const DAMMATAN = "\u064C";
+const KASRATAN = "\u064D";
 const TANWEEN = /[\u064B\u064C\u064D]/;
 const SHORT_VOWEL = /[\u064E\u064F\u0650]/;
+const NOON_SUKOON = "ن\u0652";
+const NON_JOINING = /[اأإآدذرزوؤءى]/;
 
 export function isLessonLevel(value: unknown): value is LessonLevel {
   return lessonLevels.some((level) => level === value);
@@ -86,13 +94,37 @@ export function focusForLevel(letters: readonly string[], level: LessonLevel) {
   return shorts.length > 0 ? shorts : [0];
 }
 
+/**
+ * Tanween is a noon sound. Speech engines often skip the mark, so the spoken
+ * form writes that noon: كِتَابٌ → كِتَابُنْ, وَلَدًا → وَلَدَنْ, بَيْتٍ → بَيْتِنْ.
+ */
+export function spokenSyllable(token: string) {
+  const raw = token.replace(/\u0640/g, "");
+  if (raw.includes(FATHATAN)) {
+    const base = raw.replace(/[اأإآى]/g, "").split(FATHATAN).join("");
+    return `${base || "ا"}${FATHA}${NOON_SUKOON}`;
+  }
+  if (raw.includes(DAMMATAN)) return `${raw.split(DAMMATAN).join(DAMMA)}${NOON_SUKOON}`;
+  if (raw.includes(KASRATAN)) return `${raw.split(KASRATAN).join(KASRA)}${NOON_SUKOON}`;
+  return raw;
+}
+
+/** Joining stroke so a tile shows the letter as it sits inside the word. */
+export function tileFace(token: string, index: number, letters: readonly string[]) {
+  if (index >= letters.length - 1) return token;
+  const bare = token.replace(/[\u0640\u064B-\u0652\u0670]/g, "");
+  if (NON_JOINING.test(bare) || token.includes(TATWEEL)) return token;
+  return `${token}${TATWEEL}`;
+}
+
 /** Fully vocalized speech, with a pause drawn on the saakin letter. */
 export function pacedSpeech(letters: readonly string[], fallback: string) {
   if (letters.length === 0) return fallback;
   let seenSukoon = false;
   let spoken = "";
   letters.forEach((token, index) => {
-    spoken += token;
+    const syllable = spokenSyllable(token);
+    spoken += syllable;
     const sukoon = token.includes(SUKOON);
     const more = index < letters.length - 1;
     if (more && (sukoon || seenSukoon)) spoken += TATWEEL;

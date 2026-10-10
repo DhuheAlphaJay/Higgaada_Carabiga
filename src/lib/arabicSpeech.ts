@@ -1,4 +1,4 @@
-import { pacedSpeech } from "@/lib/data/curriculum";
+import { pacedSpeech, spokenSyllable } from "@/lib/data/curriculum";
 
 /** Spoken Arabic names so each letter is clear for children. */
 const LETTER_NAMES: Record<string, string> = {
@@ -59,26 +59,63 @@ export function arabicLetterName(token: string) {
   return LETTER_NAMES[bare] ?? LETTER_NAMES[token] ?? token;
 }
 
-/** Syllable when the token has vowels, otherwise the letter's Arabic name. */
+/** Syllable when the token has vowels, otherwise a long madd or the letter name. */
 export function arabicLetterSound(token: string) {
   const bare = bareLetter(token);
-  const syllable = token.replace(/\u0640/g, "").trim();
+  const syllable = spokenSyllable(token);
   if (syllable !== bare) return syllable;
+  if (bare === "ا" || bare === "أ" || bare === "آ" || bare === "إ") return "آ";
+  if (bare === "و") return "أُو";
+  if (bare === "ي" || bare === "ى") return "إِي";
   return LETTER_NAMES[bare] ?? syllable;
+}
+
+function langOf(voice: SpeechSynthesisVoice) {
+  return voice.lang.toLowerCase().replace(/_/g, "-");
+}
+
+function isArabicVoice(voice: SpeechSynthesisVoice) {
+  const lang = langOf(voice);
+  const name = voice.name.toLowerCase();
+  if (lang === "ar" || lang.startsWith("ar-")) return true;
+  const branded = name.includes("google") || name.includes("apple") || name.includes("siri");
+  return branded && (name.includes("arab") || name.includes("arabic"));
+}
+
+function voiceRank(voice: SpeechSynthesisVoice) {
+  if (!isArabicVoice(voice)) return 0;
+  const lang = langOf(voice);
+  const name = voice.name.toLowerCase();
+  let rank = 1;
+  if (lang.startsWith("ar-sa")) rank += 50;
+  else if (lang === "ar") rank += 20;
+  else rank += 10;
+  if (PREFERRED_VOICES.some((item) => name.includes(item))) rank += 30;
+  if (name.includes("google")) rank += 15;
+  if (name.includes("apple") || name.includes("siri") || name.includes("premium") || name.includes("enhanced")) rank += 12;
+  return rank;
 }
 
 function bestArabicVoice() {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
   const voices = window.speechSynthesis.getVoices();
-  const langOf = (voice: SpeechSynthesisVoice) => voice.lang.toLowerCase().replace(/_/g, "-");
-  const saudi = voices.filter((voice) => langOf(voice).startsWith("ar-sa"));
-  const namedSaudi = saudi.find((voice) => PREFERRED_VOICES.some((name) => voice.name.toLowerCase().includes(name)));
-  return namedSaudi ?? saudi[0] ?? null;
+  let best: SpeechSynthesisVoice | null = null;
+  let bestRank = 0;
+  voices.forEach((voice) => {
+    const rank = voiceRank(voice);
+    if (rank > bestRank) {
+      best = voice;
+      bestRank = rank;
+    }
+  });
+  return best;
 }
 
-function configure(utterance: SpeechSynthesisUtterance, rate = 0.85) {
+function configure(utterance: SpeechSynthesisUtterance, rate = 0.75) {
   utterance.lang = "ar-SA";
   utterance.rate = rate;
+  utterance.pitch = 1;
+  utterance.volume = 1;
   const voice = bestArabicVoice();
   if (voice) utterance.voice = voice;
 }
@@ -108,6 +145,22 @@ export function speakSequence(phrases: string[], options?: SpeakOptions) {
     };
 
     const start = () => {
+      const synthNow = window.speechSynthesis;
+      if (synthNow.getVoices().length === 0) {
+        let began = false;
+        const begin = () => {
+          if (began) return;
+          began = true;
+          synthNow.removeEventListener("voiceschanged", begin);
+          speakLines();
+        };
+        synthNow.addEventListener("voiceschanged", begin);
+        window.setTimeout(begin, 250);
+        return;
+      }
+      speakLines();
+
+      function speakLines() {
       lines.forEach((line, index) => {
         const utterance = new SpeechSynthesisUtterance(line);
         configure(utterance, options?.rate);
@@ -122,6 +175,7 @@ export function speakSequence(phrases: string[], options?: SpeakOptions) {
         if (retainedUtterances.length > 8) retainedUtterances.shift();
         synth.speak(utterance);
       });
+      }
     };
 
     if (!options?.queue && (synth.speaking || synth.pending)) {

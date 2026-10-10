@@ -1,4 +1,5 @@
 import type { BubbleStyle } from "@/types/content";
+import { tileFace } from "@/lib/data/curriculum";
 import type { LetterDoc, WordDoc } from "@/lib/data/lessonsData";
 import { baseLetter } from "@/lib/arabic";
 import { sampleOne, shuffle } from "@/lib/random";
@@ -13,6 +14,12 @@ export type ListenRound = {
 export type BankItem = {
   id: string;
   token: string;
+  face: string;
+};
+
+export type WordListenRound = {
+  target: WordDoc;
+  options: WordDoc[];
 };
 
 const palette: BubbleStyle[] = [
@@ -60,10 +67,21 @@ export function bubbleForToken(token: string, letters: readonly LetterDoc[]): Bu
   return match ? bubbleForLetter(match, letters) : palette[0];
 }
 
+export function createWordListenRound(words: readonly WordDoc[], excludeId?: string): WordListenRound {
+  const pool = words.filter((word) => word.id !== excludeId);
+  const target = sampleOne(pool.length > 0 ? pool : words);
+  const distractors = shuffle(words.filter((word) => word.id !== target.id)).slice(0, 3);
+  return {
+    target,
+    options: shuffle([target, ...distractors]),
+  };
+}
+
 export function createLetterBank(word: WordDoc, letters: readonly LetterDoc[]): BankItem[] {
   const answers = word.letters.map((token, index) => ({
     id: `${word.id}-answer-${index}`,
     token,
+    face: tileFace(token, index, word.letters),
   }));
 
   const usedBases = new Set(word.letters.map((token) => baseLetter(token)));
@@ -72,6 +90,7 @@ export function createLetterBank(word: WordDoc, letters: readonly LetterDoc[]): 
     .map((letter) => ({
       id: `${word.id}-extra-${letter.id}`,
       token: letter.letter,
+      face: letter.letter,
     }));
 
   return shuffle([...answers, ...distractors]);

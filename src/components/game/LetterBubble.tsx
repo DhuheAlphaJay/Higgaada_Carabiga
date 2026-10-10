@@ -95,7 +95,9 @@ export function LetterBubble({
           touchAction: enableDrag ? "none" : "manipulation",
         } as CSSProperties
       }
-      className={`bubble relative flex h-20 w-20 items-center justify-center rounded-3xl text-4xl font-black leading-none sm:h-24 sm:w-24 sm:text-5xl md:h-28 md:w-28 ${
+      className={`bubble relative flex h-20 w-20 items-center justify-center rounded-3xl font-black leading-none sm:h-24 sm:w-24 md:h-28 md:w-28 ${
+        label.length > 2 ? "text-3xl sm:text-4xl" : "text-4xl sm:text-5xl"
+      } ${
         highlighted ? "ring-4 ring-amber-200 ring-offset-2 ring-offset-orange-50" : ""
       } ${dimmed ? "opacity-40" : ""}`}
     >

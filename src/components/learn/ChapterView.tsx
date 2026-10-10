@@ -1,16 +1,18 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ChevronLeft, Ear, Volume2 } from "lucide-react";
+import { ChevronLeft, Ear } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { TashkeelWord } from "@/components/game/TashkeelWord";
 import { useLessons } from "@/components/game/useLessons";
 import { BubblyButton } from "@/components/ui/BubblyButton";
-import { chapterById, type LessonLevel } from "@/lib/data/curriculum";
+import { chapterById } from "@/lib/data/curriculum";
+import type { WordDoc } from "@/lib/data/lessonsData";
 import { speakVocalized } from "@/lib/arabicSpeech";
 import { copy } from "@/lib/copy";
-import { rememberLessonLevel } from "@/lib/session";
+import { sampleOne } from "@/lib/random";
+import { rememberLessonLevel, rememberListenWord, rememberSpellWord } from "@/lib/session";
 
 export function ChapterView({ level }: { level: string }) {
   const chapter = chapterById(level);
@@ -30,9 +32,26 @@ export function ChapterView({ level }: { level: string }) {
     );
   }
 
-  function practice(id: LessonLevel) {
-    rememberLessonLevel(id);
+  function openSpell(word: WordDoc) {
+    if (!chapter) return;
+    rememberLessonLevel(chapter.id);
+    rememberSpellWord(word.id);
+    speakVocalized(word.letters, word.word);
     router.push("/spell");
+  }
+
+  function practice() {
+    if (words.length === 0) return;
+    openSpell(sampleOne(words));
+  }
+
+  function startListen() {
+    if (!chapter || words.length === 0) return;
+    const word = sampleOne(words);
+    rememberLessonLevel(chapter.id);
+    rememberListenWord(word.id);
+    speakVocalized(word.letters, word.word);
+    router.push(`/learn/${chapter.id}/listen`);
   }
 
   return (
@@ -55,7 +74,7 @@ export function ChapterView({ level }: { level: string }) {
         </p>
       </header>
 
-      <BubblyButton tone="amber" className="mt-6 w-full" onClick={() => practice(chapter.id)}>
+      <BubblyButton tone="amber" className="mt-6 w-full" onClick={practice} disabled={words.length === 0}>
         {copy.practiceChapter}
       </BubblyButton>
 
@@ -67,30 +86,29 @@ export function ChapterView({ level }: { level: string }) {
             <motion.li key={word.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.04 }}>
               <button
                 type="button"
-                onClick={() => speakVocalized(word.letters, word.word)}
+                onClick={() => openSpell(word)}
                 className="pressable edge-soft flex min-h-28 w-full flex-col items-center justify-center rounded-3xl bg-white px-3 py-4 text-center"
               >
                 <TashkeelWord letters={word.letters} focus={word.focus} className="text-4xl font-black text-indigo-950" />
                 <span dir="ltr" className="mt-2 text-sm font-extrabold text-indigo-800">
                   {word.meaning}
                 </span>
-                <span className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-sky-700">
-                  <Volume2 className="size-4" aria-hidden="true" />
-                  {copy.listen}
-                </span>
+                <span className="mt-1 text-xs font-bold text-amber-700">{copy.buildWord}</span>
               </button>
             </motion.li>
           ))}
         </ul>
       )}
 
-      <Link
-        href="/listen"
-        className="pressable edge-sky mt-4 inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-sky-500 px-4 text-sm font-extrabold text-white"
+      <button
+        type="button"
+        onClick={startListen}
+        disabled={words.length === 0}
+        className="pressable edge-sky mt-4 inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-sky-500 px-4 text-sm font-extrabold text-white disabled:opacity-50"
       >
         <Ear className="size-5" aria-hidden="true" />
         {copy.listenTitle}
-      </Link>
+      </button>
     </main>
   );
 }

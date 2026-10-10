@@ -1,8 +1,10 @@
 const LISTEN_TARGET_KEY = "xuruuf-listen-target";
+const LISTEN_WORD_KEY = "xuruuf-listen-word";
 const SPELL_WORD_KEY = "xuruuf-spell-word";
 const LESSON_LEVEL_KEY = "xuruuf-lesson-level";
 
 let listenTargetCache: string | null | undefined;
+let listenWordCache: string | null | undefined;
 let spellWordCache: string | null | undefined;
 
 function remember(key: string, id: string, clearCache: () => void) {
@@ -28,6 +30,18 @@ export function rememberListenTarget(id: string) {
 export function readListenTarget() {
   return readOnce(LISTEN_TARGET_KEY, listenTargetCache, (value) => {
     listenTargetCache = value;
+  });
+}
+
+export function rememberListenWord(id: string) {
+  remember(LISTEN_WORD_KEY, id, () => {
+    listenWordCache = undefined;
+  });
+}
+
+export function readListenWord() {
+  return readOnce(LISTEN_WORD_KEY, listenWordCache, (value) => {
+    listenWordCache = value;
   });
 }
 

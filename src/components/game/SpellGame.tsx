@@ -8,14 +8,14 @@ import { ConfettiBurst } from "@/components/game/ConfettiBurst";
 import { FeedbackBanner } from "@/components/game/FeedbackBanner";
 import { GameHeader } from "@/components/game/GameHeader";
 import { LetterBubble } from "@/components/game/LetterBubble";
-import { TashkeelWord } from "@/components/game/TashkeelWord";
 import { BubblyButton } from "@/components/ui/BubblyButton";
 import { playCorrect, playPop, playWrong, safePlay } from "@/lib/audio";
-import { arabicLetterSound, PRAISE, speakArabic, speakSequence, speakVocalized } from "@/lib/arabicSpeech";
+import { arabicLetterSound, PRAISE, speakSequence, TRY_AGAIN, speakVocalized } from "@/lib/arabicSpeech";
 import { copy } from "@/lib/copy";
 import { shuffle } from "@/lib/random";
 import { bubbleForToken, createLetterBank, type BankItem } from "@/lib/rounds";
 import { useLessons } from "@/components/game/useLessons";
+import { tileFace } from "@/lib/data/curriculum";
 import { readLessonLevel, readSpellWord } from "@/lib/session";
 import { addLesson, addStars } from "@/lib/profiles";
 import type { LetterDoc, WordDoc } from "@/lib/data/lessonsData";
@@ -23,6 +23,7 @@ import type { LetterDoc, WordDoc } from "@/lib/data/lessonsData";
 type PlacedLetter = {
   id: string;
   token: string;
+  face: string;
 };
 
 function pointInElement(element: HTMLElement | null, point: { x: number; y: number }) {
@@ -100,6 +101,7 @@ export function SpellGame() {
       setHintId(null);
       shakeSlots();
       safePlay(playWrong);
+      speakSequence([arabicLetterSound(item.token), TRY_AGAIN]);
       return;
     }
 
@@ -118,7 +120,7 @@ export function SpellGame() {
       return;
     }
 
-    speakArabic(arabicLetterSound(item.token));
+    speakSequence([arabicLetterSound(item.token)]);
     safePlay(playPop);
   }
 
@@ -174,7 +176,7 @@ export function SpellGame() {
     phase === "success"
       ? { tone: "success" as const, message: copy.spelled }
       : shake
-        ? { tone: "retry" as const, message: copy.spellWrong }
+        ? { tone: "retry" as const, message: copy.wrong }
         : { tone: null, message: null };
 
   return (
@@ -183,6 +185,7 @@ export function SpellGame() {
       <GameHeader
         title={copy.spellTitle}
         progress={phase === "done" || !word ? undefined : `${wordIndex + 1} / ${queue.length}`}
+        backHref={level ? `/learn/${level}` : "/"}
       />
 
       {!started ? (
@@ -206,16 +209,25 @@ export function SpellGame() {
             <p dir="ltr" className="text-sm font-extrabold text-orange-700">
               {word.difficulty === "easy" ? copy.easy : copy.medium}
             </p>
-            <motion.p
-              animate={phase === "success" ? { scale: [1, 1.08, 1.03] } : { scale: 1 }}
-              className="text-4xl font-black leading-tight sm:text-5xl"
-            >
-              <TashkeelWord
-                letters={word.letters}
-                focus={word.focus}
-                className={phase === "success" ? "text-amber-500 drop-shadow-[0_0_18px_rgba(251,191,36,0.95)]" : "text-indigo-700"}
-              />
-            </motion.p>
+            <div className="letter-slots mt-3 gap-2">
+              {word.letters.map((token, index) => {
+                const focused = word.focus.includes(index);
+                return (
+                  <button
+                    key={`${word.id}-piece-${index}`}
+                    type="button"
+                    onClick={() => speakSequence([arabicLetterSound(token)])}
+                    className={`pressable flex h-16 min-w-14 items-center justify-center rounded-2xl px-2 text-3xl font-black sm:h-20 sm:min-w-16 sm:text-4xl ${
+                      focused ? "bg-white text-red-600 ring-4 ring-red-300" : "bg-indigo-50 text-indigo-950"
+                    }`}
+                  >
+                    <span lang="ar" dir="rtl">
+                      {tileFace(token, index, word.letters)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
             <div className="mt-3 flex justify-center">
               <BubblyButton tone="amber" onClick={speakWord} aria-label={`${copy.listen} ${word.meaning}`}>
                 <Volume2 className="size-6" aria-hidden="true" />
@@ -252,7 +264,7 @@ export function SpellGame() {
                 >
                   {filled ? (
                     <motion.span lang="ar" dir="rtl" initial={{ scale: 0.4, y: 10 }} animate={{ scale: 1, y: 0 }}>
-                      {filled.token}
+                      {filled.face}
                     </motion.span>
                   ) : (
                     <span className="sr-only">Boos madhan {index + 1}</span>
@@ -266,7 +278,7 @@ export function SpellGame() {
             {bank.map((item) => (
               <LetterBubble
                 key={item.id}
-                label={item.token}
+                label={item.face}
                 ariaLabel={item.token}
                 bubble={bubbleForToken(item.token, letters)}
                 disabled={phase !== "build" || usedIds.has(item.id)}

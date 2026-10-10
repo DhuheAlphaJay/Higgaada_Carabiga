@@ -9,9 +9,10 @@ import { avatarEmoji } from "@/lib/profiles";
 type GameHeaderProps = {
   title: string;
   progress?: string;
+  backHref?: "/" | "/spell" | "/listen" | `/learn/${string}` | `/learn/${string}/listen`;
 };
 
-export function GameHeader({ title, progress }: GameHeaderProps) {
+export function GameHeader({ title, progress, backHref = "/" }: GameHeaderProps) {
   const stars = useStars();
   const child = useActiveChild();
 
@@ -19,7 +20,7 @@ export function GameHeader({ title, progress }: GameHeaderProps) {
     <header className="flex flex-col gap-3">
       <div className="flex items-center gap-3">
         <Link
-          href="/"
+          href={backHref}
           className="pressable edge-violet inline-flex min-h-16 flex-1 items-center justify-center gap-2 rounded-3xl bg-violet-600 px-4 text-lg font-black text-white sm:flex-none sm:px-6"
         >
           <ChevronLeft className="size-7" aria-hidden="true" />
