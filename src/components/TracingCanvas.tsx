@@ -1,8 +1,10 @@
 "use client";
 
+import { motion, useAnimationControls } from "framer-motion";
 import { Check, RotateCcw, Volume2 } from "lucide-react";
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { BubblyButton } from "@/components/ui/BubblyButton";
+import { speakTryAgain, speakWritingPraise } from "@/lib/arabicSpeech";
 import { copy } from "@/lib/copy";
 
 const penColors = [
@@ -16,28 +18,36 @@ const penColors = [
 type PenId = (typeof penColors)[number]["id"];
 type Point = { x: number; y: number };
 type Stroke = { color: string; points: Point[] };
+type Verdict = "ok" | "miss" | null;
 
 const PEN_WIDTH = 14;
+const COVER_MIN = 0.6;
+const STRAY_MAX = 0.4;
 
 export function TracingCanvas({
   guide,
   onListen,
-  onDone,
+  onSuccess,
 }: {
   guide: string;
   onListen: () => void;
-  onDone: () => void;
+  onSuccess: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const guideLayer = useRef<HTMLCanvasElement | null>(null);
+  const targetLayer = useRef<HTMLCanvasElement | null>(null);
+  const roomLayer = useRef<HTMLCanvasElement | null>(null);
+  const inkLayer = useRef<HTMLCanvasElement | null>(null);
   const strokes = useRef<Stroke[]>([]);
   const active = useRef<Point[] | null>(null);
   const colorRef = useRef<string>(penColors[0].value);
   const pointerId = useRef<number | null>(null);
+  const board = useAnimationControls();
   const [pen, setPen] = useState<PenId>("rose");
   const [hasInk, setHasInk] = useState(false);
   const [awarded, setAwarded] = useState(false);
   const [nudge, setNudge] = useState(false);
+  const [verdict, setVerdict] = useState<Verdict>(null);
 
   function choosePen(next: PenId, value: string) {
     colorRef.current = value;
@@ -46,6 +56,7 @@ export function TracingCanvas({
 
   function paint() {
     paintBoard(canvasRef.current, guideLayer.current, strokes.current, active.current, colorRef.current);
+    paintInk(inkLayer.current, canvasRef.current, strokes.current, active.current, colorRef.current);
   }
 
   function clearInk() {
@@ -54,18 +65,34 @@ export function TracingCanvas({
     setHasInk(false);
     setAwarded(false);
     setNudge(false);
+    setVerdict(null);
     paint();
   }
 
   function finish() {
     if (!hasInk) {
       setNudge(true);
+      setVerdict(null);
       return;
     }
     if (awarded) return;
-    setAwarded(true);
+    paint();
+    const result = scoreTrace(targetLayer.current, roomLayer.current, inkLayer.current);
+    if (result.ok) {
+      setAwarded(true);
+      setVerdict("ok");
+      setNudge(false);
+      speakWritingPraise();
+      onSuccess();
+      return;
+    }
+    setVerdict("miss");
     setNudge(false);
-    onDone();
+    speakTryAgain();
+    void board.start({
+      x: [0, -14, 14, -10, 10, -4, 4, 0],
+      transition: { duration: 0.45 },
+    });
   }
 
   useEffect(() => {
@@ -78,10 +105,17 @@ export function TracingCanvas({
       const cssHeight = parent.clientHeight;
       if (cssWidth < 2 || cssHeight < 2) return;
       const ratio = Math.min(window.devicePixelRatio || 1, 2);
-      canvas.width = Math.floor(cssWidth * ratio);
-      canvas.height = Math.floor(cssHeight * ratio);
-      guideLayer.current = renderGuide(guide, cssWidth, cssHeight, ratio);
-      paintBoard(canvas, guideLayer.current, strokes.current, active.current, colorRef.current);
+      const width = Math.floor(cssWidth * ratio);
+      const height = Math.floor(cssHeight * ratio);
+      canvas.width = width;
+      canvas.height = height;
+      const layers = renderGuides(guide, cssWidth, cssHeight, ratio);
+      guideLayer.current = layers.visual;
+      targetLayer.current = layers.target;
+      roomLayer.current = layers.room;
+      inkLayer.current = blankLayer(width, height);
+      paintBoard(canvas, layers.visual, strokes.current, active.current, colorRef.current);
+      paintInk(inkLayer.current, canvas, strokes.current, active.current, colorRef.current);
     };
 
     const observer = new ResizeObserver(draw);
@@ -96,11 +130,12 @@ export function TracingCanvas({
   }
 
   function onPointerDown(event: ReactPointerEvent<HTMLCanvasElement>) {
-    if (pointerId.current !== null) return;
+    if (pointerId.current !== null || awarded) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     pointerId.current = event.pointerId;
     active.current = [pointFromEvent(event)];
+    setVerdict(null);
     paint();
   }
 
@@ -123,9 +158,14 @@ export function TracingCanvas({
     paint();
   }
 
+  const ring = verdict === "miss" ? "ring-rose-500" : verdict === "ok" ? "ring-emerald-400" : "ring-violet-200";
+
   return (
     <div className="flex flex-col gap-3">
-      <div className="relative aspect-[4/3] w-full overflow-hidden rounded-[2rem] bg-[#fffdf8] shadow-[0_10px_0_0_#ddd6fe] ring-4 ring-violet-200 sm:aspect-[16/10]">
+      <motion.div
+        animate={board}
+        className={`relative aspect-[4/3] w-full overflow-hidden rounded-[2rem] bg-[#fffdf8] shadow-[0_10px_0_0_#ddd6fe] ring-4 sm:aspect-[16/10] ${ring}`}
+      >
         <canvas
           ref={canvasRef}
           aria-label={copy.traceTitle}
@@ -135,7 +175,7 @@ export function TracingCanvas({
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
         />
-      </div>
+      </motion.div>
 
       <div className="flex flex-wrap items-center justify-center gap-3" role="group" aria-label="Midabka qalinka">
         {penColors.map((swatch) => (
@@ -162,12 +202,14 @@ export function TracingCanvas({
           <Volume2 className="size-5" aria-hidden="true" />
           {copy.listen}
         </BubblyButton>
-        <BubblyButton tone="emerald" onClick={finish} className="w-full">
+        <BubblyButton tone="emerald" onClick={finish} className="w-full" disabled={awarded}>
           <Check className="size-5" aria-hidden="true" />
           {copy.traceDone}
         </BubblyButton>
       </div>
       {nudge ? <p className="text-center text-base font-extrabold text-rose-600">{copy.traceEmpty}</p> : null}
+      {verdict === "ok" ? <p className="text-center text-xl font-black text-emerald-600">{copy.traceSuccess}</p> : null}
+      {verdict === "miss" ? <p className="text-center text-lg font-black leading-snug text-rose-600">{copy.traceMiss}</p> : null}
     </div>
   );
 }
@@ -192,38 +234,116 @@ function paintBoard(
   if (live) drawSmooth(ctx, live, color);
 }
 
-function renderGuide(text: string, cssWidth: number, cssHeight: number, ratio: number) {
-  const layer = document.createElement("canvas");
-  layer.width = Math.floor(cssWidth * ratio);
-  layer.height = Math.floor(cssHeight * ratio);
-  const ctx = layer.getContext("2d");
-  if (!ctx || !text) return layer;
+function paintInk(
+  layer: HTMLCanvasElement | null,
+  canvas: HTMLCanvasElement | null,
+  ink: Stroke[],
+  live: Point[] | null,
+  color: string,
+) {
+  const ctx = layer?.getContext("2d", { willReadFrequently: true });
+  if (!layer || !ctx || !canvas) return;
+  const cssWidth = canvas.clientWidth;
+  const cssHeight = canvas.clientHeight;
+  const ratio = cssWidth > 0 ? layer.width / cssWidth : 1;
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
+  ctx.globalCompositeOperation = "source-over";
+  ink.forEach((stroke) => drawSmooth(ctx, stroke.points, stroke.color));
+  if (live) drawSmooth(ctx, live, color);
+}
+
+function scoreTrace(target: HTMLCanvasElement | null, room: HTMLCanvasElement | null, ink: HTMLCanvasElement | null) {
+  if (!target || !room || !ink) return { ok: false };
+  if (target.width !== ink.width || target.height !== ink.height || room.width !== ink.width) return { ok: false };
+  const targetCtx = target.getContext("2d", { willReadFrequently: true });
+  const roomCtx = room.getContext("2d", { willReadFrequently: true });
+  const inkCtx = ink.getContext("2d", { willReadFrequently: true });
+  if (!targetCtx || !roomCtx || !inkCtx) return { ok: false };
+  const targetPx = targetCtx.getImageData(0, 0, target.width, target.height).data;
+  const roomPx = roomCtx.getImageData(0, 0, room.width, room.height).data;
+  const inkPx = inkCtx.getImageData(0, 0, ink.width, ink.height).data;
+  let path = 0;
+  let covered = 0;
+  let drawn = 0;
+  let stray = 0;
+  const step = 2;
+  for (let y = 0; y < target.height; y += step) {
+    for (let x = 0; x < target.width; x += step) {
+      const alpha = (y * target.width + x) * 4 + 3;
+      const onPath = targetPx[alpha] > 40;
+      const inside = roomPx[alpha] > 40;
+      const marked = inkPx[alpha] > 40;
+      if (onPath) {
+        path += 1;
+        if (marked) covered += 1;
+      }
+      if (marked) {
+        drawn += 1;
+        if (!inside) stray += 1;
+      }
+    }
+  }
+  if (path < 30 || drawn < 12) return { ok: false };
+  const coverage = covered / path;
+  const strayRatio = stray / drawn;
+  return { ok: coverage >= COVER_MIN && strayRatio <= STRAY_MAX };
+}
+
+function renderGuides(text: string, cssWidth: number, cssHeight: number, ratio: number) {
+  const width = Math.floor(cssWidth * ratio);
+  const height = Math.floor(cssHeight * ratio);
+  const visual = blankLayer(width, height);
+  const target = blankLayer(width, height);
+  const room = blankLayer(width, height);
   const family = fontFamily();
-  const size = fitSize(ctx, text, cssWidth, cssHeight, family);
-  ctx.font = `900 ${size}px ${family}`;
+  const probe = visual.getContext("2d");
+  if (!probe || !text) return { visual, target, room };
+  const size = fitSize(probe, text, cssWidth, cssHeight, family);
+  strokeGlyph(visual, text, cssWidth, cssHeight, ratio, family, size, {
+    width: 11,
+    color: "rgba(196, 181, 253, 0.95)",
+    dash: [],
+  });
+  strokeGlyph(visual, text, cssWidth, cssHeight, ratio, family, size, {
+    width: 7,
+    color: "rgba(109, 40, 217, 0.95)",
+    dash: [1.2, 13],
+  });
+  strokeGlyph(target, text, cssWidth, cssHeight, ratio, family, size, { width: 20, color: "#000", dash: [] });
+  strokeGlyph(room, text, cssWidth, cssHeight, ratio, family, size, { width: 54, color: "#000", dash: [] });
+  return { visual, target, room };
+}
+
+function strokeGlyph(
+  layer: HTMLCanvasElement,
+  text: string,
+  cssWidth: number,
+  cssHeight: number,
+  ratio: number,
+  family: string,
+  size: number,
+  style: { width: number; color: string; dash: number[] },
+) {
+  const ctx = layer.getContext("2d");
+  if (!ctx) return;
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.font = `800 ${size}px ${family}`;
   ctx.direction = "rtl";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillStyle = "rgba(109, 40, 217, 0.92)";
-  ctx.fillText(text, cssWidth / 2, cssHeight / 2);
-  const mask = document.createElement("canvas");
-  mask.width = layer.width;
-  mask.height = layer.height;
-  const maskCtx = mask.getContext("2d");
-  if (!maskCtx) return layer;
-  maskCtx.setTransform(ratio, 0, 0, ratio, 0, 0);
-  maskCtx.fillStyle = "#000";
-  const gap = 12;
-  for (let y = gap / 2; y < cssHeight; y += gap) {
-    for (let x = gap / 2; x < cssWidth; x += gap) {
-      maskCtx.beginPath();
-      maskCtx.arc(x, y, 2.8, 0, Math.PI * 2);
-      maskCtx.fill();
-    }
-  }
-  ctx.globalCompositeOperation = "destination-in";
-  ctx.drawImage(mask, 0, 0, cssWidth, cssHeight);
+  ctx.lineWidth = style.width;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = style.color;
+  ctx.setLineDash(style.dash);
+  ctx.strokeText(text, cssWidth / 2, cssHeight / 2);
+}
+
+function blankLayer(width: number, height: number) {
+  const layer = document.createElement("canvas");
+  layer.width = width;
+  layer.height = height;
   return layer;
 }
 
@@ -234,9 +354,9 @@ function fontFamily() {
 
 function fitSize(ctx: CanvasRenderingContext2D, text: string, cssWidth: number, cssHeight: number, family: string) {
   let size = Math.floor(cssHeight * (text.length > 2 ? 0.5 : 0.62));
-  ctx.font = `900 ${size}px ${family}`;
+  ctx.font = `800 ${size}px ${family}`;
   const measured = ctx.measureText(text).width;
-  const limit = cssWidth * 0.88;
+  const limit = cssWidth * 0.86;
   if (measured > limit && measured > 0) size = Math.floor(size * (limit / measured));
   return Math.max(56, size);
 }
@@ -249,6 +369,7 @@ function drawSmooth(ctx: CanvasRenderingContext2D, points: Point[], color: strin
   ctx.lineWidth = PEN_WIDTH;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
+  ctx.setLineDash([]);
   if (points.length === 1) {
     ctx.beginPath();
     ctx.arc(points[0].x, points[0].y, PEN_WIDTH / 2, 0, Math.PI * 2);

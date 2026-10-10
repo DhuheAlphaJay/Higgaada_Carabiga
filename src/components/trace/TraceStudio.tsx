@@ -7,7 +7,7 @@ import { GameHeader } from "@/components/game/GameHeader";
 import { TracingCanvas } from "@/components/TracingCanvas";
 import { useLessons } from "@/components/game/useLessons";
 import { BubblyButton } from "@/components/ui/BubblyButton";
-import { speakLetterName, speakVocalized, speakWritingPraise } from "@/lib/arabicSpeech";
+import { speakLetterName, speakVocalized } from "@/lib/arabicSpeech";
 import { copy } from "@/lib/copy";
 import { addStars } from "@/lib/profiles";
 
@@ -18,6 +18,7 @@ export function TraceStudio() {
   const [mode, setMode] = useState<TraceMode>("letter");
   const [index, setIndex] = useState(0);
   const [burstId, setBurstId] = useState(0);
+  const [passed, setPassed] = useState(false);
   const letter = letters[letters.length === 0 ? 0 : index % letters.length];
   const word = words[words.length === 0 ? 0 : index % words.length];
   const items = mode === "letter" ? letters : words;
@@ -28,10 +29,13 @@ export function TraceStudio() {
   function switchMode(next: TraceMode) {
     setMode(next);
     setIndex(0);
+    setPassed(false);
   }
 
   function step(direction: -1 | 1) {
     if (items.length === 0) return;
+    if (direction === 1 && !passed) return;
+    setPassed(false);
     setIndex((value) => (value + direction + items.length) % items.length);
   }
 
@@ -40,10 +44,10 @@ export function TraceStudio() {
     if (mode === "word" && word) speakVocalized(word.letters, word.word);
   }
 
-  function finish() {
+  function succeed() {
+    setPassed(true);
     setBurstId((value) => value + 1);
     addStars(1);
-    speakWritingPraise();
   }
 
   return (
@@ -85,14 +89,14 @@ export function TraceStudio() {
       ) : (
         <>
           <p className="text-center text-sm font-extrabold text-violet-700">{copy.traceHint}</p>
-          <TracingCanvas key={guide} guide={guide} onListen={listen} onDone={finish} />
+          <TracingCanvas key={`${mode}-${guide}`} guide={guide} onListen={listen} onSuccess={succeed} />
           <p className="text-center text-2xl font-black text-indigo-950">{caption}</p>
           <div className="grid grid-cols-2 gap-3">
             <BubblyButton tone="violet" onClick={() => step(-1)}>
               <ChevronLeft className="size-6" aria-hidden="true" />
               {copy.tracePrevious}
             </BubblyButton>
-            <BubblyButton tone="sky" onClick={() => step(1)}>
+            <BubblyButton tone="sky" onClick={() => step(1)} disabled={!passed}>
               {copy.next}
               <ChevronRight className="size-6" aria-hidden="true" />
             </BubblyButton>
