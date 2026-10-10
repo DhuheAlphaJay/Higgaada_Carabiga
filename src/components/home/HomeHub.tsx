@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Ear, Shield, Star } from "lucide-react";
+import { Ear, Pencil, Shield, Star } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -133,6 +133,22 @@ export function HomeHub() {
           );
         })}
       </section>
+
+      <Link
+        href="/trace"
+        className="pressable edge-violet relative mt-4 flex min-h-32 items-center gap-4 rounded-[2rem] bg-violet-600 px-5 py-5 text-white sm:min-h-36 sm:px-7"
+      >
+        <span className="text-5xl" aria-hidden="true">
+          ✏️
+        </span>
+        <span>
+          <span className="flex items-center gap-2 text-2xl font-black sm:text-3xl">
+            <Pencil className="size-7" aria-hidden="true" />
+            {copy.traceTitle}
+          </span>
+          <span className="mt-1 block text-base font-bold opacity-90">{copy.traceHint}</span>
+        </span>
+      </Link>
 
       <Link
         href="/listen"
