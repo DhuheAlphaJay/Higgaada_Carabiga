@@ -40,7 +40,8 @@ const PREFERRED_VOICES = ["maged", "tarik", "laila", "zeina", "naayf", "hoda"];
 
 export const TRY_AGAIN = "حَاوِلْ مَرَّةً أُخْرَى!";
 export const PRAISE = "أَحْسَنْت! مُمْتَاز!";
-export const WRITING_PRAISE = "أَحْسَنْتَ! كِتَابَةٌ رَائِعَةٌ!";
+export const WRITING_PRAISE = "أَحْسَنْتَ!";
+export const COMPLETE_MARKS = "أَكْمِلِ الْحَرَكَاتِ وَالنِّقَاطَ!";
 
 type SpeakOptions = {
   queue?: boolean;
@@ -209,6 +210,10 @@ export function speakPraise(onEnd?: () => void) {
 
 export function speakWritingPraise() {
   speakArabic(WRITING_PRAISE);
+}
+
+export function speakCompleteMarks() {
+  speakArabic(COMPLETE_MARKS);
 }
 
 if (typeof window !== "undefined" && "speechSynthesis" in window) {
