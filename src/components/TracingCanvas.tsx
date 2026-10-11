@@ -20,9 +20,8 @@ type Point = { x: number; y: number };
 type Stroke = { color: string; points: Point[] };
 type Verdict = "ok" | "miss" | null;
 
-const PEN_WIDTH = 14;
-const COVER_MIN = 0.6;
-const STRAY_MAX = 0.4;
+const PEN_WIDTH = 18;
+const MIN_STROKE = 72;
 
 export function TracingCanvas({
   guide,
@@ -35,18 +34,14 @@ export function TracingCanvas({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const guideLayer = useRef<HTMLCanvasElement | null>(null);
-  const targetLayer = useRef<HTMLCanvasElement | null>(null);
   const roomLayer = useRef<HTMLCanvasElement | null>(null);
-  const inkLayer = useRef<HTMLCanvasElement | null>(null);
   const strokes = useRef<Stroke[]>([]);
   const active = useRef<Point[] | null>(null);
   const colorRef = useRef<string>(penColors[0].value);
   const pointerId = useRef<number | null>(null);
   const board = useAnimationControls();
   const [pen, setPen] = useState<PenId>("rose");
-  const [hasInk, setHasInk] = useState(false);
   const [awarded, setAwarded] = useState(false);
-  const [nudge, setNudge] = useState(false);
   const [verdict, setVerdict] = useState<Verdict>(null);
 
   function choosePen(next: PenId, value: string) {
@@ -56,43 +51,36 @@ export function TracingCanvas({
 
   function paint() {
     paintBoard(canvasRef.current, guideLayer.current, strokes.current, active.current, colorRef.current);
-    paintInk(inkLayer.current, canvasRef.current, strokes.current, active.current, colorRef.current);
   }
 
   function clearInk() {
     strokes.current = [];
     active.current = null;
-    setHasInk(false);
     setAwarded(false);
-    setNudge(false);
     setVerdict(null);
     paint();
   }
 
-  function finish() {
-    if (!hasInk) {
-      setNudge(true);
-      setVerdict(null);
-      return;
-    }
-    if (awarded) return;
-    paint();
-    const result = scoreTrace(targetLayer.current, roomLayer.current, inkLayer.current);
-    if (result.ok) {
-      setAwarded(true);
-      setVerdict("ok");
-      setNudge(false);
-      speakWritingPraise();
-      onSuccess();
-      return;
-    }
+  function miss() {
     setVerdict("miss");
-    setNudge(false);
     speakTryAgain();
     void board.start({
       x: [0, -14, 14, -10, 10, -4, 4, 0],
       transition: { duration: 0.45 },
     });
+  }
+
+  function finish() {
+    if (awarded) return;
+    const passed = childPassed(strokes.current, roomLayer.current, canvasRef.current);
+    if (passed) {
+      setAwarded(true);
+      setVerdict("ok");
+      speakWritingPraise();
+      onSuccess();
+      return;
+    }
+    miss();
   }
 
   useEffect(() => {
@@ -111,11 +99,8 @@ export function TracingCanvas({
       canvas.height = height;
       const layers = renderGuides(guide, cssWidth, cssHeight, ratio);
       guideLayer.current = layers.visual;
-      targetLayer.current = layers.target;
       roomLayer.current = layers.room;
-      inkLayer.current = blankLayer(width, height);
       paintBoard(canvas, layers.visual, strokes.current, active.current, colorRef.current);
-      paintInk(inkLayer.current, canvas, strokes.current, active.current, colorRef.current);
     };
 
     const observer = new ResizeObserver(draw);
@@ -152,8 +137,6 @@ export function TracingCanvas({
     active.current = null;
     if (points && points.length > 0) {
       strokes.current.push({ color: colorRef.current, points });
-      setHasInk(true);
-      setNudge(false);
     }
     paint();
   }
@@ -207,7 +190,6 @@ export function TracingCanvas({
           {copy.traceDone}
         </BubblyButton>
       </div>
-      {nudge ? <p className="text-center text-base font-extrabold text-rose-600">{copy.traceEmpty}</p> : null}
       {verdict === "ok" ? <p className="text-center text-xl font-black text-emerald-600">{copy.traceSuccess}</p> : null}
       {verdict === "miss" ? <p className="text-center text-lg font-black leading-snug text-rose-600">{copy.traceMiss}</p> : null}
     </div>
@@ -234,88 +216,56 @@ function paintBoard(
   if (live) drawSmooth(ctx, live, color);
 }
 
-function paintInk(
-  layer: HTMLCanvasElement | null,
-  canvas: HTMLCanvasElement | null,
-  ink: Stroke[],
-  live: Point[] | null,
-  color: string,
-) {
-  const ctx = layer?.getContext("2d", { willReadFrequently: true });
-  if (!layer || !ctx || !canvas) return;
-  const cssWidth = canvas.clientWidth;
-  const cssHeight = canvas.clientHeight;
-  const ratio = cssWidth > 0 ? layer.width / cssWidth : 1;
-  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-  ctx.clearRect(0, 0, cssWidth, cssHeight);
-  ctx.globalCompositeOperation = "source-over";
-  ink.forEach((stroke) => drawSmooth(ctx, stroke.points, stroke.color));
-  if (live) drawSmooth(ctx, live, color);
-}
-
-function scoreTrace(target: HTMLCanvasElement | null, room: HTMLCanvasElement | null, ink: HTMLCanvasElement | null) {
-  if (!target || !room || !ink) return { ok: false };
-  if (target.width !== ink.width || target.height !== ink.height || room.width !== ink.width) return { ok: false };
-  const targetCtx = target.getContext("2d", { willReadFrequently: true });
-  const roomCtx = room.getContext("2d", { willReadFrequently: true });
-  const inkCtx = ink.getContext("2d", { willReadFrequently: true });
-  if (!targetCtx || !roomCtx || !inkCtx) return { ok: false };
-  const targetPx = targetCtx.getImageData(0, 0, target.width, target.height).data;
-  const roomPx = roomCtx.getImageData(0, 0, room.width, room.height).data;
-  const inkPx = inkCtx.getImageData(0, 0, ink.width, ink.height).data;
-  let path = 0;
-  let covered = 0;
+function childPassed(ink: Stroke[], room: HTMLCanvasElement | null, canvas: HTMLCanvasElement | null) {
+  if (!room || !canvas || ink.length === 0) return false;
+  const ctx = room.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return false;
+  const pixels = ctx.getImageData(0, 0, room.width, room.height).data;
+  const ratio = canvas.clientWidth > 0 ? room.width / canvas.clientWidth : 1;
   let drawn = 0;
-  let stray = 0;
-  const step = 2;
-  for (let y = 0; y < target.height; y += step) {
-    for (let x = 0; x < target.width; x += step) {
-      const alpha = (y * target.width + x) * 4 + 3;
-      const onPath = targetPx[alpha] > 40;
-      const inside = roomPx[alpha] > 40;
-      const marked = inkPx[alpha] > 40;
-      if (onPath) {
-        path += 1;
-        if (marked) covered += 1;
-      }
-      if (marked) {
-        drawn += 1;
-        if (!inside) stray += 1;
+  let onLetter = 0;
+  ink.forEach((stroke) => {
+    const points = stroke.points;
+    if (points.length === 1) {
+      drawn += PEN_WIDTH;
+      if (coversLetter(pixels, room.width, room.height, points[0], ratio)) onLetter += PEN_WIDTH;
+      return;
+    }
+    for (let index = 1; index < points.length; index += 1) {
+      const previous = points[index - 1];
+      const current = points[index];
+      const span = Math.hypot(current.x - previous.x, current.y - previous.y);
+      drawn += span;
+      if (coversLetter(pixels, room.width, room.height, current, ratio) || coversLetter(pixels, room.width, room.height, previous, ratio)) {
+        onLetter += span;
       }
     }
-  }
-  if (path < 30 || drawn < 12) return { ok: false };
-  const coverage = covered / path;
-  const strayRatio = stray / drawn;
-  return { ok: coverage >= COVER_MIN && strayRatio <= STRAY_MAX };
+  });
+  return drawn >= MIN_STROKE && onLetter >= MIN_STROKE;
+}
+
+function coversLetter(pixels: Uint8ClampedArray, width: number, height: number, point: Point, ratio: number) {
+  const x = Math.min(width - 1, Math.max(0, Math.floor(point.x * ratio)));
+  const y = Math.min(height - 1, Math.max(0, Math.floor(point.y * ratio)));
+  return pixels[(y * width + x) * 4 + 3] > 24;
 }
 
 function renderGuides(text: string, cssWidth: number, cssHeight: number, ratio: number) {
   const width = Math.floor(cssWidth * ratio);
   const height = Math.floor(cssHeight * ratio);
   const visual = blankLayer(width, height);
-  const target = blankLayer(width, height);
   const room = blankLayer(width, height);
   const family = fontFamily();
   const probe = visual.getContext("2d");
-  if (!probe || !text) return { visual, target, room };
+  if (!probe || !text) return { visual, room };
   const size = fitSize(probe, text, cssWidth, cssHeight, family);
-  strokeGlyph(visual, text, cssWidth, cssHeight, ratio, family, size, {
-    width: 11,
-    color: "rgba(196, 181, 253, 0.95)",
-    dash: [],
-  });
-  strokeGlyph(visual, text, cssWidth, cssHeight, ratio, family, size, {
-    width: 7,
-    color: "rgba(109, 40, 217, 0.95)",
-    dash: [1.2, 13],
-  });
-  strokeGlyph(target, text, cssWidth, cssHeight, ratio, family, size, { width: 20, color: "#000", dash: [] });
-  strokeGlyph(room, text, cssWidth, cssHeight, ratio, family, size, { width: 54, color: "#000", dash: [] });
-  return { visual, target, room };
+  fillGlyph(visual, text, cssWidth, cssHeight, ratio, family, size, "#E2E8F0");
+  fillGlyph(room, text, cssWidth, cssHeight, ratio, family, size, "#000");
+  haloGlyph(room, text, cssWidth, cssHeight, ratio, family, size, 64);
+  return { visual, room };
 }
 
-function strokeGlyph(
+function prepareGlyph(
   layer: HTMLCanvasElement,
   text: string,
   cssWidth: number,
@@ -323,20 +273,49 @@ function strokeGlyph(
   ratio: number,
   family: string,
   size: number,
-  style: { width: number; color: string; dash: number[] },
 ) {
   const ctx = layer.getContext("2d");
-  if (!ctx) return;
+  if (!ctx) return null;
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
   ctx.font = `800 ${size}px ${family}`;
   ctx.direction = "rtl";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.lineWidth = style.width;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  ctx.strokeStyle = style.color;
-  ctx.setLineDash(style.dash);
+  return ctx;
+}
+
+function fillGlyph(
+  layer: HTMLCanvasElement,
+  text: string,
+  cssWidth: number,
+  cssHeight: number,
+  ratio: number,
+  family: string,
+  size: number,
+  color: string,
+) {
+  const ctx = prepareGlyph(layer, text, cssWidth, cssHeight, ratio, family, size);
+  if (!ctx) return;
+  ctx.fillStyle = color;
+  ctx.fillText(text, cssWidth / 2, cssHeight / 2);
+}
+
+function haloGlyph(
+  layer: HTMLCanvasElement,
+  text: string,
+  cssWidth: number,
+  cssHeight: number,
+  ratio: number,
+  family: string,
+  size: number,
+  width: number,
+) {
+  const ctx = prepareGlyph(layer, text, cssWidth, cssHeight, ratio, family, size);
+  if (!ctx) return;
+  ctx.lineWidth = width;
+  ctx.strokeStyle = "#000";
   ctx.strokeText(text, cssWidth / 2, cssHeight / 2);
 }
 

@@ -40,7 +40,7 @@ const PREFERRED_VOICES = ["maged", "tarik", "laila", "zeina", "naayf", "hoda"];
 
 export const TRY_AGAIN = "حَاوِلْ مَرَّةً أُخْرَى!";
 export const PRAISE = "أَحْسَنْت! مُمْتَاز!";
-export const WRITING_PRAISE = "أَحْسَنْتَ! كِتَابَةٌ صَحِيحَةٌ!";
+export const WRITING_PRAISE = "أَحْسَنْتَ! كِتَابَةٌ رَائِعَةٌ!";
 
 type SpeakOptions = {
   queue?: boolean;

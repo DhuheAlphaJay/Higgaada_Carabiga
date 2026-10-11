@@ -94,7 +94,7 @@ export const copy = {
   traceDone: "Dhammeeyay / Sax",
   traceEmpty: "Marka hore qor, kadibna dhamee.",
   traceSuccess: "Waad saxday! Qoraal aad u fiican!",
-  traceMiss: "Waad khaldatay! Fadlan farta si fiican u raaci xariiqda xarafka, mar kalena ku celi.",
+  traceMiss: "Fadlan farta saar xarafka, mar kale isku day.",
   tracePrevious: "Kan hore",
   traceLetterBlurb: "Raac xaraf kasta.",
   traceWordBlurb: "Raac erayga oo isku xiran.",
