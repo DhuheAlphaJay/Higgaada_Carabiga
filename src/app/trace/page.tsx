@@ -5,6 +5,8 @@ export const metadata: Metadata = {
   title: "Farbarashada & Qorista",
 };
 
-export default function TracePage() {
-  return <TraceStudio />;
+export default async function TracePage({ searchParams }: { searchParams: Promise<{ letter?: string }> }) {
+  const params = await searchParams;
+  const letterId = typeof params.letter === "string" ? params.letter : null;
+  return <TraceStudio letterId={letterId} />;
 }
