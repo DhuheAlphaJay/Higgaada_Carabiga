@@ -1,4 +1,4 @@
-import { focusForLevel, inferLessonLevel, isLessonLevel, type LessonLevel } from "@/lib/data/curriculum";
+import { focusForLevel, inferLessonLevel, isLessonLevel, splitArabicTiles, type LessonLevel } from "@/lib/data/curriculum";
 import { lettersCollection, wordsCollection, type LetterDoc, type WordDifficulty, type WordDoc } from "@/lib/data/lessonsData";
 
 export type LessonState = {
@@ -9,7 +9,6 @@ export type LessonState = {
 
 export type WordInput = {
   word: string;
-  lettersText: string;
   meaning: string;
   image: string;
   difficulty: WordDifficulty;
@@ -204,13 +203,6 @@ export function replaceLessons(next: Pick<LessonState, "letters" | "words">) {
   commit({ letters: next.letters, words: next.words, ready: true }, { remote: true });
 }
 
-export function parseLetterTokens(raw: string) {
-  return raw
-    .split(/[\s,،]+/)
-    .map((token) => token.trim())
-    .filter(Boolean);
-}
-
 function uniqueId(base: string, ids: string[]) {
   const cleaned = base
     .trim()
@@ -228,7 +220,7 @@ function uniqueId(base: string, ids: string[]) {
 
 export function addWord(input: WordInput) {
   const word = input.word.trim();
-  const letters = parseLetterTokens(input.lettersText);
+  const letters = splitArabicTiles(word);
   const meaning = input.meaning.trim();
   if (!word || letters.length === 0 || !meaning) return null;
 
@@ -249,7 +241,7 @@ export function addWord(input: WordInput) {
 
 export function updateWord(id: string, input: WordInput) {
   const word = input.word.trim();
-  const letters = parseLetterTokens(input.lettersText);
+  const letters = splitArabicTiles(word);
   const meaning = input.meaning.trim();
   if (!word || letters.length === 0 || !meaning) return false;
 

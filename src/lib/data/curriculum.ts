@@ -109,6 +109,39 @@ export function spokenSyllable(token: string) {
   return raw;
 }
 
+const FATHATAN_SEAT = new Set(["ا", "أ", "إ", "آ", "ى"]);
+
+/** One tile per letter, with its harakat. Tanween fath keeps its alif seat: وَلَدًا → وَ لَ دًا. */
+export function splitArabicTiles(word: string) {
+  const tiles: string[] = [];
+  let current = "";
+  for (const char of word) {
+    if (isArabicMark(char)) {
+      if (current) current += char;
+      continue;
+    }
+    if (!isArabicBase(char)) continue;
+    if (current.includes(FATHATAN) && FATHATAN_SEAT.has(char)) {
+      current += char;
+      continue;
+    }
+    if (current) tiles.push(current);
+    current = char;
+  }
+  if (current) tiles.push(current);
+  return tiles;
+}
+
+function isArabicBase(char: string) {
+  const code = char.codePointAt(0) ?? 0;
+  return (code >= 0x0621 && code <= 0x063a) || (code >= 0x0641 && code <= 0x064a);
+}
+
+function isArabicMark(char: string) {
+  const code = char.codePointAt(0) ?? 0;
+  return code === 0x0640 || code === 0x0670 || (code >= 0x064b && code <= 0x0652);
+}
+
 /** Joining stroke so a tile shows the letter as it sits inside the word. */
 export function tileFace(token: string, index: number, letters: readonly string[]) {
   if (index >= letters.length - 1) return token;

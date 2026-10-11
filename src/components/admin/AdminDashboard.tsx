@@ -18,7 +18,7 @@ import {
   type LetterInput,
   type WordInput,
 } from "@/lib/data/lessonStore";
-import { chapters, type LessonLevel } from "@/lib/data/curriculum";
+import { chapters, splitArabicTiles, tileFace, type LessonLevel } from "@/lib/data/curriculum";
 import type { WordDifficulty } from "@/lib/data/lessonsData";
 import { readCloudLink, subscribeCloudLink } from "@/lib/sync/cloud";
 import { avatarEmoji, childLevel, deleteChild, resetChild } from "@/lib/profiles";
@@ -28,12 +28,48 @@ const fieldClass =
 
 const emptyWord: WordInput = {
   word: "",
-  lettersText: "",
   meaning: "",
   image: "",
   difficulty: "easy",
   level: "harakat",
 };
+
+const arabicKeyRows = [
+  ["أ", "إ", "آ", "ا", "ب", "ت", "ث", "ج", "ح", "خ"],
+  ["د", "ذ", "ر", "ز", "س", "ش", "ص", "ض", "ط", "ظ"],
+  ["ع", "غ", "ف", "ق", "ك", "ل", "م", "ن", "ه", "و", "ي", "ء", "ة"],
+];
+
+const harakatKeys = [
+  { char: "\u064E", label: "Fatha", sample: "بَ" },
+  { char: "\u0650", label: "Kasra", sample: "بِ" },
+  { char: "\u064F", label: "Damma", sample: "بُ" },
+  { char: "\u0652", label: "Sukoon", sample: "بْ" },
+  { char: "\u0651", label: "Shaddah", sample: "بّ" },
+  { char: "\u064B", label: "Tanwiin Fath", sample: "بً" },
+  { char: "\u064D", label: "Tanwiin Kasr", sample: "بٍ" },
+  { char: "\u064C", label: "Tanwiin Damm", sample: "بٌ" },
+] as const;
+
+const emojiChoices = ["📚", "✏️", "🏠", "👦", "👧", "🦁", "☀️", "🚗", "🍎"];
+
+const readyWords: WordInput[] = [
+  { word: "كَتَبَ", meaning: "Wuu qoray", image: "✍️", difficulty: "easy", level: "harakat" },
+  { word: "جَلَسَ", meaning: "Wuu fadhiistay", image: "🪑", difficulty: "easy", level: "harakat" },
+  { word: "قَلَمُ", meaning: "Qalin", image: "✏️", difficulty: "easy", level: "harakat" },
+  { word: "أَصْعَدُ", meaning: "Waan fuulayaa", image: "⛰️", difficulty: "medium", level: "sukoon" },
+  { word: "يَطْبَعُ", meaning: "Wuu daabacaa", image: "🖨️", difficulty: "medium", level: "sukoon" },
+  { word: "يَظْلِمُ", meaning: "Wuu dulmaa", image: "⚖️", difficulty: "medium", level: "sukoon" },
+  { word: "قَالَ", meaning: "Wuu yidhi", image: "💬", difficulty: "easy", level: "madd" },
+  { word: "بَابُ", meaning: "Albaab", image: "🚪", difficulty: "easy", level: "madd" },
+  { word: "كِتَابُ", meaning: "Buug", image: "📚", difficulty: "medium", level: "madd" },
+  { word: "كِتَابٌ", meaning: "Buug", image: "📚", difficulty: "medium", level: "tanween" },
+  { word: "قَلَمٌ", meaning: "Qalin", image: "✏️", difficulty: "easy", level: "tanween" },
+  { word: "بَيْتٌ", meaning: "Guri", image: "🏠", difficulty: "medium", level: "tanween" },
+  { word: "مُحَمَّدُ", meaning: "Muxammad", image: "⭐", difficulty: "medium", level: "shadda" },
+  { word: "رَبِّ", meaning: "Eebbe", image: "🕌", difficulty: "easy", level: "shadda" },
+  { word: "حَجَّ", meaning: "Wuu xajiyay", image: "🕋", difficulty: "easy", level: "shadda" },
+];
 
 const emptyLetter: LetterInput = {
   letter: "",
@@ -180,6 +216,34 @@ function WordManager({ words }: { words: ReturnType<typeof useLessons>["words"] 
   const [error, setError] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
+  const tiles = splitArabicTiles(form.word);
+  const chapterWords = readyWords.filter((item) => item.level === form.level);
+
+  function typeChar(char: string) {
+    setForm((current) => {
+      if (isHarakah(char)) {
+        const last = Array.from(current.word).pop() ?? "";
+        if (!isHarakah(last) && !isArabicLetter(last)) return current;
+      }
+      return { ...current, word: `${current.word}${char}` };
+    });
+    setError(false);
+  }
+
+  function backspace() {
+    setForm((current) => ({ ...current, word: Array.from(current.word).slice(0, -1).join("") }));
+  }
+
+  function clearWord() {
+    setForm((current) => ({ ...current, word: "" }));
+  }
+
+  function applyPreset(preset: WordInput) {
+    setEditingId(null);
+    setError(false);
+    setForm(preset);
+  }
+
   function submit(event: FormEvent) {
     event.preventDefault();
     const saved = editingId ? updateWord(editingId, form) : addWord(form);
@@ -197,31 +261,6 @@ function WordManager({ words }: { words: ReturnType<typeof useLessons>["words"] 
       <h3 className="text-lg font-black text-indigo-950">{copy.wordsSection}</h3>
       <form onSubmit={submit} className="mt-3 grid gap-3">
         <label className="text-sm font-extrabold text-indigo-950">
-          {copy.arabicWord}
-          <input
-            lang="ar"
-            dir="rtl"
-            value={form.word}
-            onChange={(event) => setForm({ ...form, word: event.target.value })}
-            className={`${fieldClass} text-2xl`}
-          />
-        </label>
-        <label className="text-sm font-extrabold text-indigo-950">
-          {copy.wordLetters}
-          <input
-            lang="ar"
-            dir="rtl"
-            value={form.lettersText}
-            onChange={(event) => setForm({ ...form, lettersText: event.target.value })}
-            placeholder="مُ حَ مَّ د"
-            className={`${fieldClass} text-xl`}
-          />
-        </label>
-        <label className="text-sm font-extrabold text-indigo-950">
-          {copy.somaliMeaning}
-          <input value={form.meaning} onChange={(event) => setForm({ ...form, meaning: event.target.value })} className={fieldClass} />
-        </label>
-        <label className="text-sm font-extrabold text-indigo-950">
           {copy.chooseLevel}
           <select
             value={form.level}
@@ -235,23 +274,96 @@ function WordManager({ words }: { words: ReturnType<typeof useLessons>["words"] 
             ))}
           </select>
         </label>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="text-sm font-extrabold text-indigo-950">
-            {copy.emoji}
-            <input value={form.image} onChange={(event) => setForm({ ...form, image: event.target.value })} className={fieldClass} />
-          </label>
-          <label className="text-sm font-extrabold text-indigo-950">
-            Heerka erayga
-            <select
-              value={form.difficulty}
-              onChange={(event) => setForm({ ...form, difficulty: event.target.value as WordDifficulty })}
-              className={fieldClass}
-            >
-              <option value="easy">{copy.easy}</option>
-              <option value="medium">{copy.medium}</option>
-            </select>
-          </label>
+        <div>
+          <p className="text-sm font-extrabold text-indigo-950">{copy.readyWords}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {chapterWords.map((preset) => (
+              <button
+                key={preset.word}
+                type="button"
+                onClick={() => applyPreset(preset)}
+                className="pressable min-h-12 rounded-2xl bg-amber-100 px-3 text-xl font-black text-indigo-950 ring-1 ring-amber-200"
+              >
+                <span lang="ar" dir="rtl">
+                  {preset.word}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
+        <label className="text-sm font-extrabold text-indigo-950">
+          {copy.arabicWord}
+          <input
+            lang="ar"
+            dir="rtl"
+            value={form.word}
+            onChange={(event) => {
+              setForm({ ...form, word: event.target.value });
+              setError(false);
+            }}
+            className={`${fieldClass} text-2xl`}
+          />
+        </label>
+        <ArabicKeypad onType={typeChar} onBackspace={backspace} onClear={clearWord} />
+        <div className="rounded-3xl bg-violet-50 px-3 py-3 ring-1 ring-violet-100">
+          <p className="text-sm font-extrabold text-violet-800">{copy.wordPreview}</p>
+          {tiles.length === 0 ? (
+            <p className="mt-2 text-sm font-bold text-indigo-700">{copy.wordPreviewEmpty}</p>
+          ) : (
+            <div className="letter-slots mt-2 min-h-16 gap-2">
+              {tiles.map((token, index) => (
+                <span
+                  key={`${token}-${index}`}
+                  lang="ar"
+                  dir="rtl"
+                  className="inline-flex min-h-14 min-w-14 items-center justify-center rounded-2xl bg-white px-2 text-2xl font-black text-indigo-950 shadow-sm ring-2 ring-violet-100"
+                >
+                  {tileFace(token, index, tiles)}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        <label className="text-sm font-extrabold text-indigo-950">
+          {copy.somaliMeaning}
+          <input value={form.meaning} onChange={(event) => setForm({ ...form, meaning: event.target.value })} className={fieldClass} />
+        </label>
+        <div>
+          <p className="text-sm font-extrabold text-indigo-950">{copy.emoji}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {emojiChoices.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                aria-label={emoji}
+                aria-pressed={form.image === emoji}
+                onClick={() => setForm({ ...form, image: emoji })}
+                className={`pressable inline-flex size-12 items-center justify-center rounded-2xl bg-white text-2xl shadow-sm ring-2 ${
+                  form.image === emoji ? "ring-violet-500" : "ring-indigo-100"
+                }`}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+          <input
+            value={form.image}
+            onChange={(event) => setForm({ ...form, image: event.target.value })}
+            className={fieldClass}
+            aria-label={copy.emoji}
+          />
+        </div>
+        <label className="text-sm font-extrabold text-indigo-950">
+          Heerka erayga
+          <select
+            value={form.difficulty}
+            onChange={(event) => setForm({ ...form, difficulty: event.target.value as WordDifficulty })}
+            className={fieldClass}
+          >
+            <option value="easy">{copy.easy}</option>
+            <option value="medium">{copy.medium}</option>
+          </select>
+        </label>
         {error ? <p className="text-sm font-extrabold text-rose-600">{copy.formWordError}</p> : null}
         <div className="flex flex-wrap gap-2">
           <BubblyButton type="submit" tone="emerald">
@@ -306,7 +418,6 @@ function WordManager({ words }: { words: ReturnType<typeof useLessons>["words"] 
                     setEditingId(word.id);
                     setForm({
                       word: word.word,
-                      lettersText: word.letters.join(" "),
                       meaning: word.meaning,
                       image: word.image,
                       difficulty: word.difficulty,
@@ -321,6 +432,73 @@ function WordManager({ words }: { words: ReturnType<typeof useLessons>["words"] 
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+function isHarakah(char: string) {
+  const code = char.codePointAt(0) ?? 0;
+  return code === 0x0670 || (code >= 0x064b && code <= 0x0652);
+}
+
+function isArabicLetter(char: string) {
+  const code = char.codePointAt(0) ?? 0;
+  return (code >= 0x0621 && code <= 0x063a) || (code >= 0x0641 && code <= 0x064a);
+}
+
+function ArabicKeypad({
+  onType,
+  onBackspace,
+  onClear,
+}: {
+  onType: (char: string) => void;
+  onBackspace: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="rounded-3xl bg-indigo-50 p-3 ring-1 ring-indigo-100">
+      <div className="grid grid-cols-5 gap-1.5 sm:grid-cols-8 lg:grid-cols-5">
+        {arabicKeyRows.flat().map((letter) => (
+          <button
+            key={letter}
+            type="button"
+            lang="ar"
+            dir="rtl"
+            onClick={() => onType(letter)}
+            className="pressable min-h-12 rounded-2xl bg-white text-2xl font-black text-indigo-950 shadow-sm ring-1 ring-indigo-100"
+          >
+            {letter}
+          </button>
+        ))}
+      </div>
+      <p className="mt-3 text-sm font-extrabold text-indigo-950">{copy.keypadMarks}</p>
+      <div className="mt-2 grid grid-cols-4 gap-1.5">
+        {harakatKeys.map((mark) => (
+          <button
+            key={mark.label}
+            type="button"
+            onClick={() => onType(mark.char)}
+            className="pressable min-h-14 rounded-2xl bg-white px-1 text-indigo-950 shadow-sm ring-1 ring-violet-100"
+          >
+            <span lang="ar" dir="rtl" className="block text-2xl font-black leading-none">
+              {mark.sample}
+            </span>
+            <span className="mt-1 block text-[10px] font-extrabold leading-tight text-violet-700">{mark.label}</span>
+          </button>
+        ))}
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={onBackspace}
+          className="pressable min-h-12 rounded-2xl bg-amber-200 text-sm font-extrabold text-indigo-950"
+        >
+          ⌫ {copy.backspaceKey}
+        </button>
+        <button type="button" onClick={onClear} className="pressable min-h-12 rounded-2xl bg-rose-100 text-sm font-extrabold text-rose-700">
+          {copy.clearKey}
+        </button>
+      </div>
     </div>
   );
 }
