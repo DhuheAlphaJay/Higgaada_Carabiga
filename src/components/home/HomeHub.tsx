@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Pencil, Shield, Star } from "lucide-react";
+import { Shield, Star } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -11,6 +11,7 @@ import { TashkeelWord } from "@/components/game/TashkeelWord";
 import { useLessons } from "@/components/game/useLessons";
 import { useActiveChild, useStars } from "@/components/game/useStars";
 import { ChildrenModal } from "@/components/profiles/ChildrenModal";
+import { TraceStudio } from "@/components/trace/TraceStudio";
 import { chapters } from "@/lib/data/curriculum";
 import { readLessons } from "@/lib/data/lessonStore";
 import { speakLetterName } from "@/lib/arabicSpeech";
@@ -35,7 +36,7 @@ export function HomeHub() {
   const [profilesOpen, setProfilesOpen] = useState(false);
   const [gateOpen, setGateOpen] = useState(false);
   const lessons = useLessons();
-  const [hub, setHub] = useState<"letters" | "words">("letters");
+  const [hub, setHub] = useState<"letters" | "words" | "trace">("letters");
 
   function openParent() {
     if (isParentUnlocked()) {
@@ -103,31 +104,34 @@ export function HomeHub() {
         <p className="mx-auto mt-3 max-w-xl text-lg font-bold text-indigo-900 sm:text-2xl">{copy.pathTitle}</p>
       </section>
 
-      <div className="relative mt-6 grid grid-cols-2 gap-3" role="tablist" aria-label={copy.pathTitle}>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={hub === "letters"}
+      <div className="relative mt-6 grid grid-cols-1 gap-3 md:grid-cols-3" role="tablist" aria-label={copy.pathTitle}>
+        <HubCard
+          selected={hub === "letters"}
           onClick={() => setHub("letters")}
-          className={`pressable min-h-20 rounded-3xl px-3 text-base font-black leading-tight sm:min-h-24 sm:text-lg ${
-            hub === "letters" ? "edge-sky bg-sky-500 text-white" : "bg-white text-indigo-950 ring-2 ring-sky-100"
-          }`}
-        >
-          🔤 {copy.lettersHub}
-          <span className="mt-1 block text-sm font-extrabold opacity-90">{copy.lettersHubCount}</span>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={hub === "words"}
+          emoji="🔤"
+          title={copy.lettersHub}
+          hint={copy.lettersHubCount}
+          activeClass="edge-sky bg-sky-500 text-white"
+          idleClass="bg-white text-indigo-950 ring-2 ring-sky-100"
+        />
+        <HubCard
+          selected={hub === "words"}
           onClick={() => setHub("words")}
-          className={`pressable min-h-20 rounded-3xl px-3 text-base font-black leading-tight sm:min-h-24 sm:text-lg ${
-            hub === "words" ? "edge-amber bg-amber-400 text-indigo-950" : "bg-white text-indigo-950 ring-2 ring-amber-100"
-          }`}
-        >
-          📚 {copy.wordsHub}
-          <span className="mt-1 block text-sm font-extrabold opacity-90">{copy.wordsHubCount}</span>
-        </button>
+          emoji="📚"
+          title={copy.wordsHub}
+          hint={copy.wordsHubCount}
+          activeClass="edge-amber bg-amber-400 text-indigo-950"
+          idleClass="bg-white text-indigo-950 ring-2 ring-amber-100"
+        />
+        <HubCard
+          selected={hub === "trace"}
+          onClick={() => setHub("trace")}
+          emoji="✍️"
+          title={copy.traceHub}
+          hint={copy.traceHubCount}
+          activeClass="edge-violet bg-violet-600 text-white"
+          idleClass="bg-white text-indigo-950 ring-2 ring-violet-100"
+        />
       </div>
 
       {hub === "letters" ? (
@@ -178,7 +182,7 @@ export function HomeHub() {
             })}
           </ul>
         </section>
-      ) : (
+      ) : hub === "words" ? (
         <section className="relative mt-4 grid flex-1 content-start gap-3 sm:grid-cols-2">
           {chapters.map((chapter) => {
             const sample = lessons.words.find((word) => word.level === chapter.id);
@@ -209,21 +213,10 @@ export function HomeHub() {
               </motion.div>
             );
           })}
-          <Link
-            href="/trace"
-            className="pressable edge-violet flex min-h-32 items-center gap-4 rounded-[2rem] bg-violet-600 px-5 py-5 text-white sm:col-span-2 sm:min-h-36 sm:px-7"
-          >
-            <span className="text-5xl" aria-hidden="true">
-              ✏️
-            </span>
-            <span>
-              <span className="flex items-center gap-2 text-2xl font-black sm:text-3xl">
-                <Pencil className="size-7" aria-hidden="true" />
-                {copy.traceTitle}
-              </span>
-              <span className="mt-1 block text-base font-bold opacity-90">{copy.traceWordBlurb}</span>
-            </span>
-          </Link>
+        </section>
+      ) : (
+        <section className="relative mt-4">
+          <TraceStudio embedded />
         </section>
       )}
 
@@ -244,6 +237,40 @@ export function HomeHub() {
         </div>
       ) : null}
     </main>
+  );
+}
+
+function HubCard({
+  selected,
+  onClick,
+  emoji,
+  title,
+  hint,
+  activeClass,
+  idleClass,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  emoji: string;
+  title: string;
+  hint: string;
+  activeClass: string;
+  idleClass: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={selected}
+      onClick={onClick}
+      className={`pressable flex min-h-28 flex-col items-center justify-center rounded-[2rem] px-4 py-4 text-center sm:min-h-32 ${selected ? activeClass : idleClass}`}
+    >
+      <span className="text-4xl" aria-hidden="true">
+        {emoji}
+      </span>
+      <span className="mt-2 text-lg font-black leading-tight sm:text-xl">{title}</span>
+      <span className="mt-1 text-sm font-extrabold leading-snug opacity-90">{hint}</span>
+    </button>
   );
 }
 

@@ -13,7 +13,7 @@ import { addStars } from "@/lib/profiles";
 
 type TraceMode = "letter" | "word";
 
-export function TraceStudio({ letterId = null }: { letterId?: string | null }) {
+export function TraceStudio({ letterId = null, embedded = false }: { letterId?: string | null; embedded?: boolean }) {
   const { letters, words, ready } = useLessons();
   const [mode, setMode] = useState<TraceMode>("letter");
   const [index, setIndex] = useState(0);
@@ -51,17 +51,25 @@ export function TraceStudio({ letterId = null }: { letterId?: string | null }) {
     addStars(1);
   }
 
+  const shellClass = embedded
+    ? "relative flex w-full flex-col gap-4"
+    : "play-bg mx-auto flex min-h-dvh w-full max-w-3xl flex-col gap-4 px-4 py-4 sm:px-6 sm:py-6";
+
+  const Shell = embedded ? "div" : "main";
+
   return (
-    <main dir="ltr" className="play-bg mx-auto flex min-h-dvh w-full max-w-3xl flex-col gap-4 px-4 py-4 sm:px-6 sm:py-6">
+    <Shell dir="ltr" className={shellClass}>
       <ConfettiBurst burstId={burstId} />
-      <GameHeader title={copy.traceTitle} progress={pinned ? undefined : items.length > 0 ? `${safeIndex + 1} / ${items.length}` : undefined} />
+      {embedded ? null : (
+        <GameHeader title={copy.traceTitle} progress={pinned ? undefined : items.length > 0 ? `${safeIndex + 1} / ${items.length}` : undefined} />
+      )}
 
       {pinned ? null : (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <button
             type="button"
             onClick={() => switchMode("letter")}
-            className={`pressable min-h-16 rounded-3xl px-3 text-lg font-black ${
+            className={`pressable min-h-16 rounded-3xl px-3 text-base font-black leading-tight sm:text-lg ${
               mode === "letter" ? "edge-violet bg-violet-600 text-white" : "bg-white text-indigo-950 ring-2 ring-violet-100"
             }`}
           >
@@ -70,7 +78,7 @@ export function TraceStudio({ letterId = null }: { letterId?: string | null }) {
           <button
             type="button"
             onClick={() => switchMode("word")}
-            className={`pressable min-h-16 rounded-3xl px-3 text-lg font-black ${
+            className={`pressable min-h-16 rounded-3xl px-3 text-base font-black leading-tight sm:text-lg ${
               mode === "word" ? "edge-amber bg-amber-400 text-indigo-950" : "bg-white text-indigo-950 ring-2 ring-amber-100"
             }`}
           >
@@ -108,7 +116,7 @@ export function TraceStudio({ letterId = null }: { letterId?: string | null }) {
           )}
         </>
       )}
-    </main>
+    </Shell>
   );
 }
 
